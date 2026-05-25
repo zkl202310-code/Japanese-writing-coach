@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JWriteCoach · 日語作文思考力トレーニング</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-logo">
+    <div class="logo-kanji">日</div>
+    <h1>JWriteCoach</h1>
+  </div>
+  <div class="header-divider"></div>
+  <span class="tagline">日本語作文思考力トレーニング</span>
+  <span class="header-badge">写前思维 · 个性化批改 · 写后反思</span>
+</header>
+
+<main class="main">
+
+  <!-- Step Indicator -->
+  <div class="stepper" id="stepper">
+    <div class="step-item">
+      <div class="step-dot active" id="dot-0" onclick="stepClick(0)">1</div>
+      <span class="step-label active" id="lbl-0">选择模式</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-dot" id="dot-1" onclick="stepClick(1)">2</div>
+      <span class="step-label" id="lbl-1">写前构思</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-dot" id="dot-2" onclick="stepClick(2)">3</div>
+      <span class="step-label" id="lbl-2">开始写作</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-dot" id="dot-3" onclick="stepClick(3)">4</div>
+      <span class="step-label" id="lbl-3">查看批改</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item">
+      <div class="step-dot" id="dot-4" onclick="stepClick(4)">5</div>
+      <span class="step-label" id="lbl-4">反思总结</span>
+    </div>
+  </div>
+
+  <!-- ====== STEP 0: Mode Selection ====== -->
+  <section class="section active" id="sec-0">
+
+    <div class="landing-hero">
+      <h2>用日语<span>思考</span>，而不只是翻译</h2>
+      <p>写前引导构思 · 苏格拉底式提问 · 保留你的论点个性化批改</p>
+      <div class="feature-pills">
+        <span class="pill">🎯 写前思维框架</span>
+        <span class="pill sakura">🌸 个性化批改</span>
+        <span class="pill green">📈 错误模式追踪</span>
+        <span class="pill">📄 范文对照学习</span>
+      </div>
+    </div>
+
+    <div class="section-sub" style="text-align:center;margin-top:0">选择你的备考目标，系统匹配题目、字数和语体规范</div>
+
+    <div class="mode-grid">
+      <div class="mode-card n2-card" onclick="selectMode('jlpt_n2', this)">
+        <div class="mode-name">JLPT N2</div>
+        <div class="mode-style">語体：です・ます体</div>
+        <div class="mode-chars">目标字数：300〜400字</div>
+        <span class="mode-tag">📚 N2备考 · 日语专业大二大三</span>
+      </div>
+      <div class="mode-card n1-card" onclick="selectMode('jlpt_n1', this)">
+        <div class="mode-name">JLPT N1</div>
+        <div class="mode-style">語体：です・ます / だ体均可</div>
+        <div class="mode-chars">目标字数：400〜600字</div>
+        <span class="mode-tag">🏆 N1备考 · 日语专业大三大四</span>
+      </div>
+      <div class="mode-card eju-card" onclick="selectMode('eju', this)">
+        <div class="mode-name">EJU 小論文</div>
+        <div class="mode-style">語体：だ・である体（学術）</div>
+        <div class="mode-chars">目标字数：400〜500字</div>
+        <span class="mode-tag">🎓 赴日留学 · 专业八级</span>
+      </div>
+    </div>
+
+    <div class="btn-row" style="justify-content:center;margin-top:28px">
+      <button class="btn btn-primary" id="btn-start" onclick="goToStep1()" disabled style="padding:13px 36px;font-size:15px">
+        开始练习 →
+      </button>
+    </div>
+  </section>
+
+  <!-- ====== STEP 1: 写前构思 ====== -->
+  <section class="section" id="sec-1">
+    <div class="nav-row">
+      <button class="back-btn" onclick="goBack()">← 返回模式选择</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📌</span>今日题目</div>
+      <div class="topic-box" id="topic-display">加载中…</div>
+      <div class="topic-hint" id="topic-hint"></div>
+      <button class="btn-link" style="margin-top:8px" onclick="loadTopic()">換一題 ↺</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🧠</span>写前构思 — 先想清楚再动笔</div>
+
+      <div class="form-group">
+        <label class="form-label" id="position-label">你的立场 / 核心观点</label>
+        <div id="quick-pos-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"></div>
+        <input class="form-input" id="position-input"
+          placeholder="输入你的立场或核心观点（也可点击上方快捷按钮）">
+        <div class="topic-hint" id="position-hint" style="margin-top:4px"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" id="reasons-label">主要论据 / 思路（关键词即可，不需要完整句子）</label>
+        <input class="form-input" id="reason1" placeholder="论点①（支持你观点的理由或例子）" style="margin-bottom:8px">
+        <input class="form-input" id="reason2" placeholder="论点②" style="margin-bottom:8px">
+        <input class="form-input" id="reason3" placeholder="论点③（选填）">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">文章构成</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="structure" value="序論→本論→結論">
+            序論 → 本論 → 結論
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="structure" value="起承転結">
+            起承転結
+          </label>
+        </div>
+      </div>
+
+      <div id="plan-loading" class="loading" style="display:none">
+        <div class="spinner"></div> 教练正在评估你的构思…
+      </div>
+      <div id="plan-feedback-box" style="display:none">
+        <div class="ai-feedback" id="plan-feedback-text"></div>
+        <div id="plan-status-badge"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="submitPlan()">提交构思 →</button>
+        <button class="btn btn-outline" id="btn-to-write" onclick="goToStep2()" style="display:none">開始寫作 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== STEP 2: 写作 ====== -->
+  <section class="section" id="sec-2">
+    <div class="nav-row">
+      <button class="back-btn" onclick="goBack()">← 返回写前构思</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📝</span>题目</div>
+      <div class="topic-box" id="topic-display-2"></div>
+    </div>
+
+    <div class="plan-summary" id="plan-summary-display"></div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">✍️</span>开始写作</div>
+      <textarea class="form-textarea" id="draft-input"
+        placeholder="在这里输入你的日语作文…"
+        oninput="updateCharCount()"></textarea>
+      <div class="char-counter" id="char-counter">0 字</div>
+
+      <div id="socratic-loading" class="loading" style="display:none">
+        <div class="spinner"></div> 教练正在阅读你的草稿…
+      </div>
+
+      <div id="socratic-box" style="display:none">
+        <div class="jp-divider">教 练 的 提 问</div>
+        <div class="section-sub" style="margin-bottom:12px">先思考这些问题，再决定是否修改</div>
+        <div id="socratic-questions"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="backToWrite()">← 修改后重新提交</button>
+          <button class="btn btn-primary" onclick="requestCorrection()">查看个性化批改结果 →</button>
+        </div>
+      </div>
+
+      <div id="correct-loading" class="loading" style="display:none">
+        <div class="spinner"></div> 正在进行个性化批改，请稍候（约15秒）…
+      </div>
+
+      <div class="btn-row" id="draft-btn-row">
+        <button class="btn btn-primary" onclick="submitDraft()">提交草稿 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== STEP 3: 批改结果 ====== -->
+  <section class="section" id="sec-3">
+    <div class="nav-row">
+      <button class="back-btn" onclick="goBack()">← 返回写作</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔍</span>个性化批改结果</div>
+      <div class="section-sub" style="margin-bottom:16px">已保留你的立场和论点，仅修改语言层面问题</div>
+
+      <div id="score-badge"></div>
+      <div class="error-stats" id="error-stats"></div>
+
+      <div class="card-title" style="margin-top:8px">批改后的作文</div>
+      <div class="correction-essay" id="corrected-essay"></div>
+
+      <div class="card-title">逐条批注</div>
+      <div id="annotations-list"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="requestReflection()">查看反思总结 →</button>
+      </div>
+      <div id="reflect-loading" class="loading" style="display:none">
+        <div class="spinner"></div> 生成个性化反思报告…
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== STEP 4: 反思总结 ====== -->
+  <section class="section" id="sec-4">
+    <div class="nav-row">
+      <button class="back-btn" onclick="goBack()">← 返回批改结果</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🌱</span>本次练习反思</div>
+
+      <div style="margin-bottom:20px">
+        <div class="form-label" style="margin-bottom:10px">✨ 本次亮点</div>
+        <div id="highlights-list"></div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div class="form-label" style="margin-bottom:10px">📌 需要强化的模式</div>
+        <div id="patterns-list"></div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div class="form-label">🎯 下次重点关注</div>
+        <div class="ai-feedback" id="next-focus" style="margin-top:8px;padding:14px 18px;background:var(--blue-lt);border-color:rgba(37,99,235,.2)"></div>
+      </div>
+
+      <div class="encouragement" id="encouragement"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span>範文参考</div>
+      <div class="section-sub">用你的立场和理由写成的示范作文 — 观察差距在哪里</div>
+
+      <div id="model-loading" class="loading">
+        <div class="spinner"></div> 正在生成个性化范文…
+      </div>
+
+      <div id="model-essay-content" style="display:none">
+        <div class="model-essay-box" id="model-essay-text"></div>
+
+        <div class="key-expressions" id="key-expressions-section" style="display:none">
+          <div class="form-label" style="margin:16px 0 10px">📚 本文重点表达</div>
+          <div id="key-expressions-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-primary" style="padding:13px 36px" onclick="resetAll()">再練一次 →</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -954,4 +954,212 @@ body {
   .modal-overlay { padding: 16px 8px; }
   .history-stats { gap: 8px; }
   .stat-num { font-size: 22px; }
+  .email-scene-grid { grid-template-columns: 1fr; }
+  .email-score-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ============================================================
+   Track 2: Email Mode Styles
+   ============================================================ */
+
+/* --- Main page entry banner --- */
+.email-mode-entry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%);
+  border: 1.5px solid #BFDBFE;
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: box-shadow .18s, transform .18s, border-color .18s;
+  margin-top: 8px;
+}
+.email-mode-entry:hover {
+  border-color: #93C5FD;
+  box-shadow: 0 4px 16px rgba(37,99,235,.12);
+  transform: translateY(-2px);
+}
+.email-entry-icon { font-size: 28px; flex-shrink: 0; }
+.email-entry-body { flex: 1; }
+.email-entry-title { font-size: 16px; font-weight: 700; color: var(--navy); }
+.email-entry-desc  { font-size: 13px; color: var(--gray-600); margin-top: 3px; }
+.email-entry-arrow { font-size: 20px; color: var(--matcha); font-weight: 700; }
+
+/* --- Scene selection grid --- */
+.email-scene-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.email-scene-card {
+  background: #fff;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  cursor: pointer;
+  transition: border-color .18s, box-shadow .18s, transform .15s;
+  position: relative;
+}
+.email-scene-card:hover {
+  border-color: var(--matcha);
+  box-shadow: 0 3px 12px rgba(5,150,105,.1);
+  transform: translateY(-2px);
+}
+.email-scene-card.selected {
+  border-color: var(--matcha);
+  box-shadow: 0 0 0 3px rgba(5,150,105,.18);
+  background: #F0FDF4;
+}
+.esc-icon       { font-size: 26px; margin-bottom: 8px; }
+.esc-title      { font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 3px; }
+.esc-difficulty { display: inline-block; font-size: 11px; font-weight: 600; background: #EFF6FF; color: #2563EB; padding: 2px 8px; border-radius: 10px; margin-bottom: 6px; }
+.esc-desc       { font-size: 12px; color: var(--gray-600); line-height: 1.6; }
+
+.email-scene-cushion {
+  background: #FFF7ED;
+  border: 1px solid #FDE68A;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--gray-800);
+  margin-bottom: 4px;
+}
+
+/* --- Email format reference panel --- */
+.email-format-box { margin-top: 10px; }
+.email-format-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+}
+.email-format-line:last-child { border-bottom: none; }
+.email-format-tag {
+  flex-shrink: 0;
+  width: 52px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--matcha);
+  background: #F0FDF4;
+  padding: 2px 6px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+/* --- Keigo tips --- */
+.keigo-tip-item {
+  font-size: 13px;
+  color: var(--gray-700);
+  padding: 5px 0;
+  line-height: 1.7;
+  border-bottom: 1px dashed var(--gray-100);
+}
+.keigo-tip-item:last-child { border-bottom: none; }
+
+/* --- Draft area (shared style) --- */
+.draft-area {
+  width: 100%;
+  min-height: 260px;
+  font-family: 'Noto Serif JP', Georgia, serif;
+  font-size: 14px;
+  line-height: 2;
+  padding: 14px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 10px;
+  resize: vertical;
+  color: var(--ink);
+  background: #FAFAFA;
+  transition: border-color .2s;
+  box-sizing: border-box;
+}
+.draft-area:focus { outline: none; border-color: var(--matcha); background: #fff; }
+
+/* --- Score grid --- */
+.email-score-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.email-score-card {
+  text-align: center;
+  background: #F8FAFC;
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 14px 8px;
+}
+.email-score-total {
+  background: var(--navy);
+  color: #fff;
+  border-color: var(--navy);
+}
+.email-score-total .email-score-dim,
+.email-score-total .email-score-desc { color: rgba(255,255,255,.75); }
+.email-score-val  { font-size: 24px; font-weight: 800; line-height: 1.2; }
+.email-score-dim  { font-size: 12px; font-weight: 700; color: var(--gray-700); margin-top: 4px; }
+.email-score-desc { font-size: 10px; color: var(--gray-400); margin-top: 2px; line-height: 1.4; }
+
+/* --- Keigo mistakes alert card --- */
+.card-keigo-alert {
+  border-color: #FCA5A5 !important;
+  background: #FFF5F5;
+}
+.keigo-mistake-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #FEE2E2;
+}
+.keigo-mistake-item:last-child { border-bottom: none; }
+.keigo-mistake-type {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  background: #FEE2E2;
+  color: #DC2626;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+.keigo-mistake-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.keigo-orig  { font-size: 14px; color: #DC2626; text-decoration: line-through; font-family: 'Noto Serif JP', serif; }
+.keigo-arrow { color: var(--gray-400); font-weight: 700; }
+.keigo-fixed { font-size: 14px; color: #059669; font-weight: 600; font-family: 'Noto Serif JP', serif; }
+.keigo-rule  { font-size: 12px; color: var(--gray-600); background: #FFF7ED; padding: 5px 10px; border-radius: 6px; }
+
+/* --- Annotations (shared with essay track) --- */
+.annotation-item { padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
+.annotation-item:last-child { border-bottom: none; }
+.annotation-change { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.ann-orig  { font-size: 13px; color: var(--gray-500); text-decoration: line-through; }
+.ann-arrow { color: var(--gray-400); }
+.ann-fixed { font-size: 13px; color: #059669; font-weight: 600; }
+.annotation-exp { font-size: 12px; color: var(--gray-600); line-height: 1.7; }
+
+/* --- Highlights card --- */
+.card-highlight { border-color: #A7F3D0 !important; background: #F0FDF4; }
+.highlight-item { font-size: 13px; color: #065F46; padding: 5px 0; line-height: 1.7; }
+
+/* --- Model email / key expressions --- */
+.model-notes { margin-bottom: 12px; }
+.model-note-item {
+  font-size: 13px;
+  color: var(--gray-700);
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--gray-100);
+}
+.model-note-item:last-child { border-bottom: none; }
+.model-email-text { margin-top: 8px; }
+.key-expr-item {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.key-expr-item:last-child { border-bottom: none; }
+.key-expr-jp { font-weight: 700; color: var(--navy); font-family: 'Noto Serif JP', serif; min-width: 140px; }
+.key-expr-cn { color: var(--gray-600); }

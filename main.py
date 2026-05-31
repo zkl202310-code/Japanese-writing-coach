@@ -243,3 +243,45 @@ async def history(user_id: str):
         "stats": get_user_stats(user_id),
         "sessions": get_user_history(user_id),
     }
+
+
+# ---- Track 2: Email Writing ----
+
+class EmailCorrectRequest(BaseModel):
+    scene_id: str
+    scene_title: str
+    key_info: str
+    email_draft: str
+
+
+class EmailModelRequest(BaseModel):
+    scene_id: str
+    scene_title: str
+    key_info: str
+
+
+@app.post("/api/email/correct")
+async def email_correct(req: EmailCorrectRequest):
+    if len(req.email_draft.strip()) < 30:
+        raise HTTPException(status_code=400, detail="邮件内容太短，请至少写30字")
+    result_str = chat_json(
+        system=prompts.EMAIL_CORRECTION_SYSTEM,
+        user=prompts.EMAIL_CORRECTION_USER.format(
+            scene_title=req.scene_title,
+            key_info=req.key_info,
+            email_draft=req.email_draft,
+        ),
+    )
+    return safe_json(result_str)
+
+
+@app.post("/api/email/model")
+async def email_model(req: EmailModelRequest):
+    result_str = chat_json(
+        system=prompts.EMAIL_MODEL_SYSTEM,
+        user=prompts.EMAIL_MODEL_USER.format(
+            scene_title=req.scene_title,
+            key_info=req.key_info,
+        ),
+    )
+    return safe_json(result_str)

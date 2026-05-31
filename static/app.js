@@ -629,3 +629,404 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+
+// ============================================================
+// Track 2: Email Mode
+// ============================================================
+
+const EMAIL_SCENES = [
+  {
+    id: 'prof_kekka',
+    title: '请假申请',
+    icon: '🏥',
+    difficulty: '初级',
+    description: '因病或因事无法出席课程/研讨会，向教授发送请假邮件',
+    fields: [
+      { id: 'course', label: '课程名称', placeholder: '例：日本語言語学概論' },
+      { id: 'date',   label: '请假日期', placeholder: '例：6月10日（火）の授業' },
+      { id: 'reason', label: '请假原因（简洁即可）', placeholder: '例：発熱のため / 帰省のため' },
+      { id: 'request', label: '希望如何处理', placeholder: '例：授業の資料をいただけますでしょうか' },
+    ],
+    keigo_tips: [
+      '先表达歉意，再说明原因——不要开门见山就说"我要请假"',
+      '理由简洁即可（一句话），不需要过度解释',
+      '主动提出补救方案，显示你负责任的态度',
+      '「教えてください」过于直接 → 建议用「ご教示いただけますでしょうか」',
+    ],
+    cushion: '「ご迷惑をおかけして申し訳ございません」',
+  },
+  {
+    id: 'prof_shitsumon',
+    title: '课程提问',
+    icon: '❓',
+    difficulty: '初级',
+    description: '对课程内容、作业要求或论文方向有疑问，通过邮件向教授请教',
+    fields: [
+      { id: 'course',    label: '课程/作业名称', placeholder: '例：第3回レポート課題' },
+      { id: 'question',  label: '具体疑问点', placeholder: '例：○○という概念の定義について' },
+      { id: 'my_thought', label: '你自己的理解（先写出来）', placeholder: '例：○○と理解していますが合っているでしょうか' },
+    ],
+    keigo_tips: [
+      '先表明自己的理解再提问——说明你已思考过，避免被认为懒惰',
+      '「ご教示いただけますでしょうか」比「教えてください」礼貌得多',
+      '一封邮件不要同时提太多问题，聚焦在一个核心疑问上',
+      '常用缓冲：「お時間のある際に」「よろしければ」',
+    ],
+    cushion: '「お忙しいところ恐れ入りますが」',
+  },
+  {
+    id: 'prof_mendan',
+    title: '约见面谈',
+    icon: '📅',
+    difficulty: '中级',
+    description: '希望预约教授的office hour，讨论论文选题、研究进度等',
+    fields: [
+      { id: 'purpose',      label: '面谈目的', placeholder: '例：修士論文のテーマについてご相談したく' },
+      { id: 'time_options', label: '你方便的时间（2-3个备选）', placeholder: '例：来週の火曜か木曜の午後' },
+      { id: 'duration',     label: '预计时长（可选）', placeholder: '例：30分ほど' },
+    ],
+    keigo_tips: [
+      '提供2-3个时间选项，让教授选——不要只说"随时都行"',
+      '约见目的要明确写出来，不要含糊地说"想聊聊"',
+      '「ご都合がよろしければ」比「時間ありますか」礼貌得多',
+      '开场用：「お忙しいところ誠に恐れ入りますが」',
+    ],
+    cushion: '「お忙しいところ誠に恐れ入りますが」',
+  },
+  {
+    id: 'prof_suisen',
+    title: '求推荐信',
+    icon: '📝',
+    difficulty: '高级',
+    description: '申请留学、交换项目或就职时，请求导师/教授撰写推荐信',
+    fields: [
+      { id: 'purpose',   label: '推荐信用途', placeholder: '例：○○大学への交換留学申請' },
+      { id: 'deadline',  label: '截止日期', placeholder: '例：7月末まで（越早越好！）' },
+      { id: 'relation',  label: '与该教授的关系', placeholder: '例：3年次から○○ゼミに所属' },
+      { id: 'strength',  label: '希望教授提及的方面（可选）', placeholder: '例：研究への取り組み姿勢など' },
+    ],
+    keigo_tips: [
+      '至少提前1个月发送——截止前一周才问是大忌',
+      '开场用：「誠に勝手なお願いではございますが」',
+      '为教授提供便利：告知deadline、所需格式、你的项目说明等',
+      '若被拒绝要优雅接受，不要施压',
+    ],
+    cushion: '「誠に勝手なお願いではございますが」',
+  },
+];
+
+const emailState = {
+  scene: null,
+  keyInfo: {},
+  emailDraft: null,
+  correction: null,
+  modelEmailPromise: null,
+};
+
+function updateEmailStepper(step) {
+  [0, 1, 2].forEach(i => {
+    const dot = document.getElementById(`email-dot-${i}`);
+    const lbl = document.getElementById(`email-lbl-${i}`);
+    if (!dot) return;
+    dot.className = 'step-dot';
+    lbl.className = 'step-label';
+    if (i < step)        { dot.classList.add('done');   lbl.classList.add('done'); }
+    else if (i === step) { dot.classList.add('active'); lbl.classList.add('active'); }
+  });
+}
+
+function goEmailStep(n) {
+  ['sec-email-0', 'sec-email-1', 'sec-email-2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const target = document.getElementById(`sec-email-${n}`);
+  if (target) target.classList.add('active');
+  updateEmailStepper(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function enterEmailMode() {
+  document.getElementById('sec-0').classList.remove('active');
+  document.getElementById('stepper').style.display = 'none';
+  document.getElementById('email-stepper').style.display = 'flex';
+  renderEmailSceneGrid();
+  goEmailStep(0);
+}
+
+function exitEmailMode() {
+  ['sec-email-0', 'sec-email-1', 'sec-email-2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  document.getElementById('email-stepper').style.display = 'none';
+  document.getElementById('stepper').style.display = 'flex';
+  document.getElementById('sec-0').classList.add('active');
+}
+
+function renderEmailSceneGrid() {
+  const grid = document.getElementById('email-scene-grid');
+  grid.innerHTML = EMAIL_SCENES.map(s => `
+    <div class="email-scene-card" id="esc-${s.id}" onclick="selectEmailScene('${s.id}', this)">
+      <div class="esc-icon">${s.icon}</div>
+      <div class="esc-title">${esc(s.title)}</div>
+      <div class="esc-difficulty">${esc(s.difficulty)}</div>
+      <div class="esc-desc">${esc(s.description)}</div>
+    </div>`).join('');
+}
+
+function selectEmailScene(sceneId, el) {
+  emailState.scene = EMAIL_SCENES.find(s => s.id === sceneId);
+  document.querySelectorAll('.email-scene-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('btn-email-start').disabled = false;
+  const desc = document.getElementById('email-scene-desc');
+  desc.style.display = '';
+  desc.innerHTML = `<span class="icon">💡</span> 常用クッション言葉：<strong>${esc(emailState.scene.cushion)}</strong>`;
+}
+
+function startEmailWrite() {
+  if (!emailState.scene) return;
+  emailState.keyInfo = {};
+  document.getElementById('email-scene-recap').textContent =
+    `${emailState.scene.icon} ${emailState.scene.title}——${emailState.scene.description}`;
+  document.getElementById('email-draft-input').value = '';
+  document.getElementById('email-char-counter').textContent = '0 字';
+  document.getElementById('btn-email-correct').disabled = false;
+  document.getElementById('email-format-panel').style.display = 'none';
+  document.getElementById('email-format-toggle').textContent = '展开 ▼';
+  document.getElementById('email-keigo-tips').style.display = 'none';
+  document.getElementById('keigo-tips-toggle').textContent = '展开 ▼';
+  renderEmailKeyFields();
+  renderKeigoTips();
+  goEmailStep(1);
+}
+
+function renderEmailKeyFields() {
+  document.getElementById('email-key-fields').innerHTML =
+    emailState.scene.fields.map(f => `
+      <div class="form-group">
+        <label class="form-label">${esc(f.label)}</label>
+        <input class="form-input" id="ekf-${f.id}" placeholder="${esc(f.placeholder)}"
+               oninput="emailState.keyInfo['${f.id}'] = this.value">
+      </div>`).join('');
+}
+
+function renderKeigoTips() {
+  document.getElementById('email-keigo-tips').innerHTML =
+    emailState.scene.keigo_tips.map(t => `<div class="keigo-tip-item">• ${esc(t)}</div>`).join('');
+}
+
+function toggleEmailFormat() {
+  const panel = document.getElementById('email-format-panel');
+  const btn   = document.getElementById('email-format-toggle');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? '' : 'none';
+  btn.textContent = open ? '收起 ▲' : '展开 ▼';
+}
+
+function toggleKeigoTips() {
+  const panel = document.getElementById('email-keigo-tips');
+  const btn   = document.getElementById('keigo-tips-toggle');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? '' : 'none';
+  btn.textContent = open ? '收起 ▲' : '展开 ▼';
+}
+
+function updateEmailCounter(el) {
+  document.getElementById('email-char-counter').textContent = `${el.value.length} 字`;
+}
+
+function buildKeyInfoString() {
+  return emailState.scene.fields
+    .map(f => `${f.label}：${emailState.keyInfo[f.id] || '（未填）'}`)
+    .join('\n');
+}
+
+async function submitEmailCorrect() {
+  const draft = document.getElementById('email-draft-input').value.trim();
+  if (draft.length < 30) { alert('邮件内容太短，请至少写30字'); return; }
+  emailState.emailDraft = draft;
+
+  show('email-correct-loading');
+  document.getElementById('btn-email-correct').disabled = true;
+
+  try {
+    const result = await api('/api/email/correct', {
+      scene_id:    emailState.scene.id,
+      scene_title: emailState.scene.title,
+      key_info:    buildKeyInfoString(),
+      email_draft: draft,
+    });
+    emailState.correction = result;
+    emailState.modelEmailPromise = api('/api/email/model', {
+      scene_id:    emailState.scene.id,
+      scene_title: emailState.scene.title,
+      key_info:    buildKeyInfoString(),
+    });
+    emailState.modelEmailPromise.catch(() => {});
+    renderEmailCorrection(result);
+    goEmailStep(2);
+  } catch (e) {
+    alert('批改失败：' + e.message);
+    document.getElementById('btn-email-correct').disabled = false;
+  } finally {
+    hide('email-correct-loading');
+  }
+}
+
+const SCORE_DIM_LABELS = {
+  keigo:       { label: '敬語正確性', desc: '尊敬語/謙譲語正确使用' },
+  politeness:  { label: '礼貌度',     desc: 'クッション言葉·语气' },
+  format:      { label: '格式完整性', desc: '宛名·結び·署名等' },
+  naturalness: { label: '语言自然度', desc: '地道流畅，无中文腔' },
+};
+
+const EMAIL_ERROR_LABELS = {
+  keigo:       { label: '敬語', cls: 'badge-grammar' },
+  politeness:  { label: '礼貌度', cls: 'badge-naturalness' },
+  format:      { label: '格式', cls: 'badge-connector' },
+  naturalness: { label: '自然度', cls: 'badge-particle' },
+};
+
+function scoreColor(v) {
+  if (v >= 9) return '#059669';
+  if (v >= 7) return '#2563EB';
+  if (v >= 5) return '#F59E0B';
+  return '#EF4444';
+}
+
+function renderEmailCorrection(result) {
+  const score = result.score || {};
+  const grade = score.grade || '—';
+  const gradeColor = { S: '#059669', A: '#2563EB', B: '#F59E0B', C: '#EF4444' }[grade] || '#6B7280';
+
+  // Score cards
+  document.getElementById('email-score-section').innerHTML = `
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span>批改评分</div>
+      <div class="email-score-grid">
+        ${Object.entries(SCORE_DIM_LABELS).map(([k, v]) => `
+          <div class="email-score-card">
+            <div class="email-score-val" style="color:${scoreColor(score[k] || 0)}">${score[k] || 0}<span style="font-size:13px;color:var(--gray-400)">/10</span></div>
+            <div class="email-score-dim">${v.label}</div>
+            <div class="email-score-desc">${v.desc}</div>
+          </div>`).join('')}
+        <div class="email-score-card email-score-total">
+          <div class="email-score-val" style="color:${gradeColor};font-size:32px">${grade}</div>
+          <div class="email-score-dim">${score.total || 0} / 40</div>
+          <div class="email-score-desc">${esc(score.comment_cn || '')}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Keigo mistakes
+  const mistakes = result.keigo_mistakes || [];
+  document.getElementById('email-keigo-mistakes-section').innerHTML = mistakes.length ? `
+    <div class="card card-keigo-alert">
+      <div class="card-title"><span class="icon">⚠️</span>敬語错误详解（${mistakes.length}处，重点记忆）</div>
+      ${mistakes.map(m => `
+        <div class="keigo-mistake-item">
+          <span class="keigo-mistake-type">${esc(m.type)}</span>
+          <div class="keigo-mistake-row">
+            <span class="keigo-orig">${esc(m.original)}</span>
+            <span class="keigo-arrow">→</span>
+            <span class="keigo-fixed">${esc(m.corrected)}</span>
+          </div>
+          <div class="keigo-rule">📌 ${esc(m.rule)}</div>
+        </div>`).join('')}
+    </div>` : '';
+
+  // Annotations
+  const annotations = result.annotations || [];
+  document.getElementById('email-annotations-section').innerHTML = annotations.length ? `
+    <div class="card">
+      <div class="card-title"><span class="icon">🔍</span>批注详情（${annotations.length}处）</div>
+      ${annotations.map(a => {
+        const info = EMAIL_ERROR_LABELS[a.error_type] || { label: a.error_type, cls: '' };
+        return `
+          <div class="annotation-item">
+            <span class="badge ${info.cls}">${info.label}</span>
+            <div class="annotation-change">
+              <span class="ann-orig">${esc(a.original)}</span>
+              <span class="ann-arrow">→</span>
+              <span class="ann-fixed">${esc(a.corrected)}</span>
+            </div>
+            <div class="annotation-exp">${esc(a.explanation_cn)}</div>
+          </div>`;
+      }).join('')}
+    </div>` : '';
+
+  // Highlights
+  const highlights = result.highlights || [];
+  document.getElementById('email-highlights-section').innerHTML = highlights.length ? `
+    <div class="card card-highlight">
+      <div class="card-title"><span class="icon">✨</span>做得好的地方</div>
+      ${highlights.map(h => `<div class="highlight-item">✓ ${esc(h)}</div>`).join('')}
+    </div>` : '';
+
+  // Corrected email
+  document.getElementById('email-corrected-text').innerHTML =
+    esc(result.corrected_email || '').replace(/\n/g, '<br>');
+
+  // Reset model section
+  document.getElementById('btn-email-model').disabled = false;
+  hide('email-model-content');
+  hide('email-model-loading');
+}
+
+async function loadEmailModel() {
+  document.getElementById('btn-email-model').disabled = true;
+  show('email-model-loading');
+  hide('email-model-content');
+  try {
+    const data = await (emailState.modelEmailPromise || api('/api/email/model', {
+      scene_id:    emailState.scene.id,
+      scene_title: emailState.scene.title,
+      key_info:    buildKeyInfoString(),
+    }));
+    renderEmailModel(data);
+    show('email-model-content');
+  } catch (e) {
+    document.getElementById('email-model-loading').innerHTML =
+      `<span style="color:var(--red)">范文生成失败：${esc(e.message)}</span>`;
+  } finally {
+    hide('email-model-loading');
+  }
+}
+
+function renderEmailModel(data) {
+  const notes = data.notes_cn || [];
+  const exprs = data.key_expressions || [];
+  document.getElementById('email-model-content').innerHTML = `
+    ${notes.length ? `<div class="model-notes">${notes.map(n => `<div class="model-note-item">📌 ${esc(n)}</div>`).join('')}</div>` : ''}
+    <div class="corrected-essay model-email-text">${esc(data.email || '').replace(/\n/g, '<br>')}</div>
+    ${exprs.length ? `
+      <div class="key-expressions" style="margin-top:16px">
+        <div class="section-sub" style="margin-bottom:8px;font-weight:600">范文重点表达</div>
+        ${exprs.map(e => `
+          <div class="key-expr-item">
+            <span class="key-expr-jp">${esc(e.expression)}</span>
+            <span class="key-expr-cn">${esc(e.explanation_cn)}</span>
+          </div>`).join('')}
+      </div>` : ''}`;
+}
+
+function resetEmailMode() {
+  Object.assign(emailState, {
+    scene: null, keyInfo: {}, emailDraft: null, correction: null, modelEmailPromise: null,
+  });
+  document.getElementById('email-draft-input').value = '';
+  document.getElementById('email-char-counter').textContent = '0 字';
+  document.getElementById('btn-email-correct').disabled = false;
+  document.getElementById('btn-email-start').disabled = true;
+  document.getElementById('email-scene-desc').style.display = 'none';
+  document.querySelectorAll('.email-scene-card').forEach(c => c.classList.remove('selected'));
+  ['email-score-section', 'email-keigo-mistakes-section',
+   'email-annotations-section', 'email-highlights-section'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+  goEmailStep(0);
+}

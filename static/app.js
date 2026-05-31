@@ -18,6 +18,8 @@ const CHAR_TARGETS = {
   jlpt_n1:   { min: 400, max: 600 },
   eju:       { min: 400, max: 500 },
   gaokao_jp: { min: 300, max: 350 },
+  tem4:      { min: 350, max: 400 },
+  tem8:      { min: 450, max: 500 },
 };
 
 const EXAM_NAMES = {
@@ -25,6 +27,8 @@ const EXAM_NAMES = {
   jlpt_n1:   'N1 水平',
   eju:       'EJU 小論文',
   gaokao_jp: '高考日语',
+  tem4:      '日语专业四级',
+  tem8:      '日语专业八级',
 };
 
 // Stable anonymous identity stored in the browser, used to fetch learning history.

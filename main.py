@@ -167,6 +167,7 @@ async def correct_draft(req: DraftRequest):
         system=prompts.CORRECTION_SYSTEM.format(
             position=session["plan_position"],
             reasons=fmt_reasons(reasons),
+            exam_rubric=prompts.EXAM_RUBRICS.get(session["exam_type"], ""),
         ),
         user=prompts.CORRECTION_USER.format(
             exam_label=exam_label,

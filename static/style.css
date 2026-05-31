@@ -308,10 +308,12 @@ body {
   border-radius: var(--radius) var(--radius) 0 0;
 }
 
-.mode-card.n2-card::after { background: linear-gradient(90deg, #FB7185, #FBBF24); }
-.mode-card.n1-card::after { background: linear-gradient(90deg, #2563EB, #7C3AED); }
-.mode-card.eju-card::after{ background: linear-gradient(90deg, #059669, #0D9488); }
-.mode-card.gk-card::after { background: linear-gradient(90deg, #B45309, #F59E0B); }
+.mode-card.n2-card::after  { background: linear-gradient(90deg, #FB7185, #FBBF24); }
+.mode-card.n1-card::after  { background: linear-gradient(90deg, #2563EB, #7C3AED); }
+.mode-card.eju-card::after { background: linear-gradient(90deg, #059669, #0D9488); }
+.mode-card.gk-card::after  { background: linear-gradient(90deg, #B45309, #F59E0B); }
+.mode-card.tem4-card::after{ background: linear-gradient(90deg, #7C3AED, #DB2777); }
+.mode-card.tem8-card::after{ background: linear-gradient(90deg, #1D4ED8, #0F766E); }
 
 .mode-card:hover {
   transform: translateY(-5px);

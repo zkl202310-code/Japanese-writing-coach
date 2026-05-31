@@ -63,26 +63,15 @@
       </div>
     </div>
 
-    <div class="section-sub" style="text-align:center;margin-top:0">选择你的备考目标，系统匹配题目、字数和语体规范</div>
+    <div class="section-sub" style="text-align:center;margin-top:0">选择写作类型，系统自动匹配题目、字数和语体规范</div>
 
+    <div class="mode-group-label">✍️ 备考写作 · 有作文的考试</div>
     <div class="mode-grid">
-      <div class="mode-card n2-card" onclick="selectMode('jlpt_n2', this)">
-        <div class="mode-name">JLPT N2</div>
-        <div class="mode-style">語体：です・ます体</div>
-        <div class="mode-chars">目标字数：300〜400字</div>
-        <span class="mode-tag">📚 N2备考 · 日语专业大二大三</span>
-      </div>
-      <div class="mode-card n1-card" onclick="selectMode('jlpt_n1', this)">
-        <div class="mode-name">JLPT N1</div>
-        <div class="mode-style">語体：です・ます / だ体均可</div>
-        <div class="mode-chars">目标字数：400〜600字</div>
-        <span class="mode-tag">🏆 N1备考 · 日语专业大三大四</span>
-      </div>
       <div class="mode-card eju-card" onclick="selectMode('eju', this)">
         <div class="mode-name">EJU 小論文</div>
         <div class="mode-style">語体：だ・である体（学術）</div>
         <div class="mode-chars">目标字数：400〜500字</div>
-        <span class="mode-tag">🎓 赴日留学 · 专业八级</span>
+        <span class="mode-tag">🎓 赴日留学 · 记述（写作）题</span>
       </div>
       <div class="mode-card gk-card" onclick="selectMode('gaokao_jp', this)">
         <div class="mode-name">高考日语</div>
@@ -91,6 +80,25 @@
         <span class="mode-tag">✏️ 高中高考 · 记叙文/意见文</span>
       </div>
     </div>
+
+    <div class="mode-group-label" style="margin-top:24px">🧠 自由练习 · 写作思维训练（按日语水平）</div>
+    <div class="mode-group-hint">JLPT 不考作文，这里的 N2 / N1 仅作为<strong>难度水平</strong>，用于无考试压力地训练写作思维</div>
+    <div class="mode-grid">
+      <div class="mode-card n2-card" onclick="selectMode('jlpt_n2', this)">
+        <div class="mode-name">N2 水平</div>
+        <div class="mode-style">語体：です・ます体</div>
+        <div class="mode-chars">目标字数：300〜400字</div>
+        <span class="mode-tag">📚 中级 · 意见文练习</span>
+      </div>
+      <div class="mode-card n1-card" onclick="selectMode('jlpt_n1', this)">
+        <div class="mode-name">N1 水平</div>
+        <div class="mode-style">語体：です・ます / だ体均可</div>
+        <div class="mode-chars">目标字数：400〜600字</div>
+        <span class="mode-tag">🏆 高级 · 议论文练习</span>
+      </div>
+    </div>
+
+    <div class="mode-coming-soon">📮 実用写作（商务邮件 · 大学场景邮件 · 敬语实用）正在开发中，敬请期待</div>
 
     <div class="btn-row" style="justify-content:center;margin-top:28px">
       <button class="btn btn-primary" id="btn-start" onclick="goToStep1()" disabled style="padding:13px 36px;font-size:15px">

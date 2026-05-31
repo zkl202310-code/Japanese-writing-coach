@@ -21,8 +21,8 @@ const CHAR_TARGETS = {
 };
 
 const EXAM_NAMES = {
-  jlpt_n2:   'JLPT N2',
-  jlpt_n1:   'JLPT N1',
+  jlpt_n2:   'N2 水平',
+  jlpt_n1:   'N1 水平',
   eju:       'EJU 小論文',
   gaokao_jp: '高考日语',
 };

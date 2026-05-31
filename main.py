@@ -12,6 +12,8 @@ import prompts
 from database import (
     create_session,
     get_session,
+    get_user_history,
+    get_user_stats,
     init_db,
     save_error_records,
     update_session,
@@ -37,6 +39,7 @@ class PlanRequest(BaseModel):
     position: str
     reasons: list[str]
     structure: str
+    user_id: str | None = None
 
 
 class DraftRequest(BaseModel):
@@ -102,7 +105,7 @@ async def review_plan(req: PlanRequest):
         temperature=0.5,
     )
 
-    session_id = create_session(req.exam_type, req.topic_text)
+    session_id = create_session(req.exam_type, req.topic_text, user_id=req.user_id)
     update_session(
         session_id,
         plan_position=req.position,
@@ -112,7 +115,9 @@ async def review_plan(req: PlanRequest):
         status="writing",
     )
 
-    can_proceed = "【可以开始写作】" in feedback or "建议先调整" not in feedback
+    # The prompt always ends with either 【可以开始写作】 or 【建议先调整计划】.
+    # Treat "needs adjustment" as the only blocking signal; default to proceed otherwise.
+    can_proceed = "【建议先调整计划】" not in feedback
 
     return {"session_id": session_id, "feedback": feedback, "can_proceed": can_proceed}
 
@@ -227,3 +232,13 @@ async def get_model_essay(req: SessionRequest):
     result = safe_json(result_str)
     update_session(req.session_id, model_essay_json=result_str)
     return result
+
+
+@app.get("/api/history")
+async def history(user_id: str):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id required")
+    return {
+        "stats": get_user_stats(user_id),
+        "sessions": get_user_history(user_id),
+    }

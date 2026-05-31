@@ -14,10 +14,29 @@ const state = {
 };
 
 const CHAR_TARGETS = {
-  jlpt_n2: { min: 300, max: 400 },
-  jlpt_n1: { min: 400, max: 600 },
-  eju:     { min: 400, max: 500 },
+  jlpt_n2:   { min: 300, max: 400 },
+  jlpt_n1:   { min: 400, max: 600 },
+  eju:       { min: 400, max: 500 },
+  gaokao_jp: { min: 300, max: 350 },
 };
+
+const EXAM_NAMES = {
+  jlpt_n2:   'JLPT N2',
+  jlpt_n1:   'JLPT N1',
+  eju:       'EJU 小論文',
+  gaokao_jp: '高考日语',
+};
+
+// Stable anonymous identity stored in the browser, used to fetch learning history.
+function getUserId() {
+  let id = localStorage.getItem('jwc_user_id');
+  if (!id) {
+    id = 'u_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem('jwc_user_id', id);
+  }
+  return id;
+}
+const USER_ID = getUserId();
 
 const ERROR_LABELS = {
   particle:    { label: '助词',   cls: 'badge-particle' },
@@ -181,6 +200,7 @@ async function submitPlan() {
       position,
       reasons,
       structure,
+      user_id: USER_ID,
     });
 
     state.sessionId = data.session_id;
@@ -302,12 +322,21 @@ async function requestCorrection() {
     state.correction = data;
     renderCorrection(data);
     goToStep(3);
+    // Model essay is the slowest call (~15-20s). Start it now, in the background,
+    // so it is usually ready by the time the user reaches the reflection step.
+    prefetchModelEssay();
   } catch (e) {
     alert('批改请求失败：' + e.message);
     show('socratic-box');
   } finally {
     hide('correct-loading');
   }
+}
+
+function prefetchModelEssay() {
+  state.modelEssayPromise = api('/api/model-essay', { session_id: state.sessionId });
+  // Swallow background errors here; loadModelEssay() surfaces them on retry.
+  state.modelEssayPromise.catch(() => {});
 }
 
 // -------- Step 3: Correction display --------
@@ -402,7 +431,8 @@ async function loadModelEssay() {
   show('model-loading');
   hide('model-essay-content');
   try {
-    const data = await api('/api/model-essay', { session_id: state.sessionId });
+    // Reuse the background prefetch started right after correction, if present.
+    const data = await (state.modelEssayPromise || api('/api/model-essay', { session_id: state.sessionId }));
     document.getElementById('model-essay-text').textContent = data.essay || '';
 
     const exprSection = document.getElementById('key-expressions-section');
@@ -432,6 +462,7 @@ function resetAll() {
   Object.assign(state, {
     currentStep: 0, examType: null, topic: null, sessionId: null,
     planFeedback: null, canProceed: false, draft: null, correction: null,
+    modelEssayPromise: null,
   });
 
   // Reset form
@@ -450,6 +481,117 @@ function resetAll() {
   document.getElementById('btn-start').disabled = true;
 
   goToStep(0);
+}
+
+// -------- Learning history dashboard --------
+
+async function openHistory() {
+  const modal = document.getElementById('history-modal');
+  modal.style.display = 'flex';
+  show('history-loading');
+  hide('history-empty');
+  hide('history-content');
+  try {
+    const data = await api(`/api/history?user_id=${encodeURIComponent(USER_ID)}`);
+    if (!data.sessions || data.sessions.length === 0) {
+      show('history-empty');
+    } else {
+      renderHistory(data);
+      show('history-content');
+    }
+  } catch (e) {
+    document.getElementById('history-loading').innerHTML =
+      '<span style="color:var(--red)">加载失败，请稍后重试</span>';
+    return;
+  } finally {
+    hide('history-loading');
+  }
+}
+
+function closeHistory() {
+  document.getElementById('history-modal').style.display = 'none';
+}
+
+function renderHistory(data) {
+  const stats = data.stats || {};
+  const sessions = data.sessions || [];
+
+  // Stat cards
+  const weakInfo = stats.weakest_type ? ERROR_LABELS[stats.weakest_type] : null;
+  document.getElementById('history-stat-cards').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-num">${stats.total_sessions || 0}</div>
+      <div class="stat-cap">累计练习</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">${stats.total_errors || 0}</div>
+      <div class="stat-cap">累计批注</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="font-size:18px">${weakInfo ? weakInfo.label : '—'}</div>
+      <div class="stat-cap">最需强化</div>
+    </div>`;
+
+  // Error-type distribution bars
+  const totals = stats.error_totals || {};
+  const maxCount = Math.max(1, ...Object.values(totals));
+  const barsEl = document.getElementById('history-error-bars');
+  barsEl.innerHTML = '';
+  Object.entries(ERROR_LABELS).forEach(([type, info]) => {
+    const count = totals[type] || 0;
+    const pct = Math.round((count / maxCount) * 100);
+    barsEl.innerHTML += `
+      <div class="err-bar-row">
+        <span class="err-bar-label">${info.label}</span>
+        <div class="err-bar-track">
+          <div class="err-bar-fill ${info.cls}" style="width:${count ? Math.max(pct, 6) : 0}%"></div>
+        </div>
+        <span class="err-bar-num">${count}</span>
+      </div>`;
+  });
+
+  // Trend chart (errors per essay, oldest → newest)
+  const trend = stats.trend || [];
+  const trendEl = document.getElementById('history-trend');
+  trendEl.innerHTML = '';
+  if (trend.length === 0) {
+    trendEl.innerHTML = '<span class="section-sub">暂无足够数据</span>';
+  } else {
+    const maxErr = Math.max(1, ...trend.map(t => t.total_errors));
+    trend.forEach((t, i) => {
+      const h = Math.max(6, Math.round((t.total_errors / maxErr) * 90));
+      trendEl.innerHTML += `
+        <div class="trend-bar-wrap" title="第${i + 1}篇 · ${t.total_errors}处批注">
+          <span class="trend-val">${t.total_errors}</span>
+          <div class="trend-bar" style="height:${h}px"></div>
+          <span class="trend-idx">${i + 1}</span>
+        </div>`;
+    });
+  }
+
+  // Session list
+  const listEl = document.getElementById('history-list');
+  listEl.innerHTML = '';
+  sessions.forEach(s => {
+    const date = (s.created_at || '').replace('T', ' ').slice(0, 16);
+    const examName = EXAM_NAMES[s.exam_type] || s.exam_type;
+    const badges = Object.entries(s.error_summary || {})
+      .filter(([, c]) => c > 0)
+      .map(([type, c]) => {
+        const info = ERROR_LABELS[type] || { label: type, cls: '' };
+        return `<span class="stat-badge ${info.cls}" style="font-size:10px">${info.label} ${c}</span>`;
+      }).join('');
+    listEl.innerHTML += `
+      <div class="hist-item">
+        <div class="hist-item-head">
+          <span class="hist-exam">${examName}</span>
+          <span class="hist-level">${s.score_level || '—'}</span>
+          <span class="hist-date">${date}</span>
+        </div>
+        <div class="hist-topic">${esc((s.topic_text || '').slice(0, 60))}${(s.topic_text || '').length > 60 ? '…' : ''}</div>
+        <div class="hist-badges">${badges || '<span class="section-sub" style="font-size:11px">无批注</span>'}</div>
+      </div>`;
+  });
 }
 
 // -------- Utilities --------

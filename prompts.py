@@ -5,9 +5,10 @@
 # ============================================================
 
 EXAM_LABELS = {
-    "jlpt_n2": "JLPT N2 意見文（です・ます体、300〜400字）",
-    "jlpt_n1": "JLPT N1 意見文（です・ます体 または だ体、400〜600字）",
-    "eju":     "EJU 小論文（だ・である体、400〜500字、学術議論文）",
+    "jlpt_n2":   "JLPT N2 意見文（です・ます体、300〜400字）",
+    "jlpt_n1":   "JLPT N1 意見文（です・ます体 または だ体、400〜600字）",
+    "eju":       "EJU 小論文（だ・である体、400〜500字、学術議論文）",
+    "gaokao_jp": "高考日语 作文（です・ます体、300〜350字、記叙文・意見文）",
 }
 
 # ------------------------------------------------------------
@@ -97,6 +98,13 @@ CORRECTION_SYSTEM = """你是一位专业的日语写作教练，正在对中国
 - 学生的论点、结论方向、举例内容
 - 主观判断和价值观表达
 
+【输出质量要求 — 必须严格遵守】
+1. annotations 只标注真实存在的问题。作文写得好就少标，不要为凑数而编造或反复修饰同一处。
+2. annotations 最多 8 条，按"对得分影响最大"排序，优先助词误用、语体不一致、明显语法错误。
+3. error_summary 中每个类型的数字，必须等于 annotations 里该 error_type 的实际条数（两者必须一一对应、可被核对）。
+4. corrected_essay 必须保留学生原意，且语体与目标考试一致（见考试类型说明，如です・ます体 / だ・である体）。
+5. score_estimate.level 给出该作文当前最接近的级别（如 N2、N1），comment_cn 用30字以内点明最关键的1个进步方向。
+
 请严格按以下JSON格式输出，不要输出任何其他内容：
 {{
   "corrected_essay": "修正後の完全な作文テキスト（注释用【】标注，如：【序論】はじめに…）",
@@ -120,7 +128,9 @@ CORRECTION_SYSTEM = """你是一位专业的日语写作教练，正在对中国
     "naturalness": 0,
     "grammar": 0
   }}
-}}"""
+}}
+
+再次提醒：error_summary 的每个数字 = annotations 中对应 error_type 的条数。请在输出前自检一致性。"""
 
 CORRECTION_USER = """考试类型：{exam_label}
 题目：{topic}
@@ -197,23 +207,3 @@ MODEL_ESSAY_USER = """题目：{topic}
 考试类型：{exam_label}
 
 请基于学生的论点（立场：{position}，理由：{reasons}）写一篇示范作文。"""
-
-
-# Aliases used in main.py (kept here so all prompt strings are in one place)
-CORRECTION_USER = """考试类型：{exam_label}
-题目：{topic}
-文章构成：{structure}
-
-学生提交的作文（请在保留其立场和理由的前提下进行语言层面批改）：
-{draft}"""
-
-REFLECTION_USER = """原文（学生初稿）：
-{original}
-
-批改后版本：
-{corrected}
-
-错误统计：{error_summary}
-批改标注数量：{annotations_count} 处
-
-请生成反思报告。"""

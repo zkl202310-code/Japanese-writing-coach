@@ -16,6 +16,7 @@
   <div class="header-divider"></div>
   <span class="tagline">日本語作文思考力トレーニング</span>
   <span class="header-badge">写前思维 · 个性化批改 · 写后反思</span>
+  <button class="header-history-btn" onclick="openHistory()">📈 我的学习记录</button>
 </header>
 
 <main class="main">
@@ -82,6 +83,12 @@
         <div class="mode-style">語体：だ・である体（学術）</div>
         <div class="mode-chars">目标字数：400〜500字</div>
         <span class="mode-tag">🎓 赴日留学 · 专业八级</span>
+      </div>
+      <div class="mode-card gk-card" onclick="selectMode('gaokao_jp', this)">
+        <div class="mode-name">高考日语</div>
+        <div class="mode-style">語体：です・ます体</div>
+        <div class="mode-chars">目标字数：300〜350字</div>
+        <span class="mode-tag">✏️ 高中高考 · 记叙文/意见文</span>
       </div>
     </div>
 
@@ -275,6 +282,43 @@
   </section>
 
 </main>
+
+<!-- ====== History Modal ====== -->
+<div class="modal-overlay" id="history-modal" style="display:none" onclick="if(event.target===this)closeHistory()">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0"><span class="icon">📈</span>我的学习记录</div>
+      <button class="modal-close" onclick="closeHistory()">✕</button>
+    </div>
+
+    <div id="history-loading" class="loading"><div class="spinner"></div> 加载学习记录…</div>
+
+    <div id="history-empty" class="history-empty" style="display:none">
+      <div style="font-size:40px;margin-bottom:10px">🌱</div>
+      <div>还没有练习记录。完成一次写作批改后，这里会出现你的<strong>错误趋势</strong>和<strong>历史作文</strong>。</div>
+    </div>
+
+    <div id="history-content" style="display:none">
+      <div class="history-stats" id="history-stat-cards"></div>
+
+      <div class="history-block">
+        <div class="history-block-title">📊 错误类型分布（全部练习累计）</div>
+        <div id="history-error-bars"></div>
+      </div>
+
+      <div class="history-block">
+        <div class="history-block-title">📉 每篇错误数趋势（旧 → 新）</div>
+        <div class="trend-chart" id="history-trend"></div>
+        <div class="trend-caption">柱越来越矮 = 你在进步 👏</div>
+      </div>
+
+      <div class="history-block">
+        <div class="history-block-title">📝 历史作文</div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

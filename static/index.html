@@ -128,13 +128,13 @@
       </div>
     </div>
 
-    <div class="mode-group-label" style="margin-top:24px">📮 実用写作 · 学术邮件</div>
-    <div class="mode-group-hint">敬語专项纠错 · 格式批改 · 给教授发邮件不再担心失礼</div>
+    <div class="mode-group-label" style="margin-top:24px">📮 実用写作 · 邮件敬語</div>
+    <div class="mode-group-hint">敬語专项纠错 · 格式批改 · 学术与求职邮件不再担心失礼</div>
     <div class="email-mode-entry" onclick="enterEmailMode()">
       <span class="email-entry-icon">📮</span>
       <div class="email-entry-body">
-        <div class="email-entry-title">给教授 / 导师的邮件</div>
-        <div class="email-entry-desc">请假 · 提问 · 约见 · 求推荐信 — 4个常见场景 · AI 敬語专项检测</div>
+        <div class="email-entry-title">日语邮件 · 敬語训练</div>
+        <div class="email-entry-desc">给教授（请假/提问/约见/推荐信）· 求职就活（应募/OB访问/面试日程/致谢/内定）— 9 个场景 · AI 敬語专项检测</div>
       </div>
       <span class="email-entry-arrow">→</span>
     </div>
@@ -336,7 +336,7 @@
     </div>
     <div class="landing-hero" style="padding:20px 0 12px">
       <h2>选择邮件<span>场景</span></h2>
-      <p>给教授/导师的学术邮件 · 敬語纠错 · 格式批改 · 范文对照</p>
+      <p>学术邮件（给教授）· 求职邮件（就活）· 敬語纠错 · 格式批改 · 范文对照</p>
     </div>
     <div class="email-scene-grid" id="email-scene-grid"></div>
     <div id="email-scene-desc" class="email-scene-cushion" style="display:none"></div>
@@ -364,15 +364,7 @@
         <button class="btn-link" onclick="toggleEmailFormat()" id="email-format-toggle" style="font-size:12px;margin-left:8px">展开 ▼</button>
       </div>
       <div id="email-format-panel" style="display:none">
-        <div class="email-format-box">
-          <div class="email-format-line"><span class="email-format-tag">宛名</span>〇〇先生 / 〇〇教授</div>
-          <div class="email-format-line"><span class="email-format-tag">名乗り</span>〇〇学部〇年の〇〇と申します。</div>
-          <div class="email-format-line"><span class="email-format-tag">挨拶</span>いつもお世話になっております。</div>
-          <div class="email-format-line"><span class="email-format-tag">用件</span>（本題を一文で明確に）</div>
-          <div class="email-format-line"><span class="email-format-tag">本文</span>（詳細・依頼・質問内容）</div>
-          <div class="email-format-line"><span class="email-format-tag">結び</span>どうぞよろしくお願いいたします。</div>
-          <div class="email-format-line"><span class="email-format-tag">署名</span>氏名 / 学籍番号 / 連絡先</div>
-        </div>
+        <div class="email-format-box" id="email-format-box"></div>
       </div>
     </div>
 

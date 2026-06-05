@@ -993,6 +993,19 @@ body {
   gap: 14px;
   margin-bottom: 16px;
 }
+.email-cat-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 6px 0 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gray-200);
+}
+.email-cat-header:not(:first-child) { margin-top: 14px; }
 .email-scene-card {
   background: #fff;
   border: 1.5px solid var(--gray-200);

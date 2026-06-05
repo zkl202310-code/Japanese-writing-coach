@@ -714,6 +714,109 @@ const EMAIL_SCENES = [
     ],
     cushion: '「誠に勝手なお願いではございますが」',
   },
+
+  // ---- 求职 / 就活 ----
+  {
+    id: 'job_entry',
+    category: 'jobhunt',
+    title: '应募/エントリー',
+    icon: '📨',
+    difficulty: '中级',
+    description: '向企业发送求职申请/咨询邮件，表达应募意向（常附简历）',
+    fields: [
+      { id: 'company',  label: '公司·收件人', placeholder: '例：株式会社○○ 採用ご担当者様' },
+      { id: 'position', label: '应聘职位',     placeholder: '例：総合職 / ○○エンジニア職' },
+      { id: 'channel',  label: '得知途径（可选）', placeholder: '例：貴社採用サイト / 大学キャリアセンター' },
+      { id: 'appeal',   label: '一句话自我推荐', placeholder: '例：○○の経験を活かしたく応募いたしました' },
+    ],
+    keigo_tips: [
+      '宛名不知道具体姓名时用「採用ご担当者様」，知道部门姓名则「人事部 ○○様」',
+      '名乗り必写学校·学部·姓名：「○○大学○○学部の○○と申します」',
+      '开头直接说明应募意图，简洁有力，避免冗长寒暄',
+      '若附简历要在正文提及：「履歴書を添付いたしますので、ご査収ください」',
+    ],
+    cushion: '「突然のご連絡失礼いたします」',
+  },
+  {
+    id: 'job_obog',
+    category: 'jobhunt',
+    title: 'OB·OG訪問依頼',
+    icon: '🤝',
+    difficulty: '高级',
+    description: '请求向已入职的学长/学姐（OB·OG）请教，约访问·咨询',
+    fields: [
+      { id: 'intro',   label: '你如何得知对方', placeholder: '例：大学のキャリアセンターでご連絡先を拝見し' },
+      { id: 'purpose', label: '想请教什么',     placeholder: '例：貴社の○○業務についてお話を伺いたく' },
+      { id: 'time',    label: '你方便的时间（可选）', placeholder: '例：来週以降、○○様のご都合に合わせます' },
+    ],
+    keigo_tips: [
+      '对方虽是前辈但素未谋面，要格外礼貌并说明来由，避免唐突',
+      '明确说明怎么拿到对方联系方式的，消除"陌生联络"的戒心',
+      '时间上完全配合对方：「○○様のご都合に合わせて伺います」',
+      '感谢对方百忙中抽时间，结尾留有退路（对方拒绝也不施压）',
+    ],
+    cushion: '「突然のご連絡を差し上げる失礼をお許しください」',
+  },
+  {
+    id: 'job_schedule',
+    category: 'jobhunt',
+    title: '面试日程调整',
+    icon: '🗓️',
+    difficulty: '中级',
+    description: '回复企业的面试邀约，确认或协调面试时间',
+    fields: [
+      { id: 'which',        label: '针对哪次选考', placeholder: '例：一次面接 / ○○職の選考' },
+      { id: 'availability', label: '你能配合的时间', placeholder: '例：候補日のうち○月○日○時が可能です' },
+      { id: 'note',         label: '其他说明（可选）', placeholder: '例：上記以外の日程もご相談可能です' },
+    ],
+    keigo_tips: [
+      '收到邀约24小时内回复，开头先道谢「面接の機会をいただき」',
+      '明确写出能/不能的具体日期，不要含糊地说"都行"',
+      '若需改期要诚恳致歉并主动提供2-3个备选时间',
+      '结尾确认出席：「当日はどうぞよろしくお願いいたします」',
+    ],
+    cushion: '「この度は面接の機会をいただき、誠にありがとうございます」',
+  },
+  {
+    id: 'job_thanks',
+    category: 'jobhunt',
+    title: '面试后致谢',
+    icon: '🙏',
+    difficulty: '中级',
+    description: '面试结束当天，向面试官/人事发送感谢邮件',
+    fields: [
+      { id: 'interview',  label: '面试信息',       placeholder: '例：本日○時の一次面接' },
+      { id: 'impression', label: '印象最深的一点', placeholder: '例：○○のお話が大変勉強になりました' },
+      { id: 'aspiration', label: '强化志望度（可选）', placeholder: '例：貴社で働きたい思いが一層強まりました' },
+    ],
+    keigo_tips: [
+      '面试当天发出，最迟次日上午——越快越显诚意',
+      '提及面试中的具体内容，显示真诚，避免"模板感"',
+      '简洁为主，面试官很忙，不要写太长',
+      '再次表达志望度，但不卑微、不施压',
+    ],
+    cushion: '「本日はお忙しい中、貴重なお時間をいただき」',
+  },
+  {
+    id: 'job_naitei',
+    category: 'jobhunt',
+    title: '内定承诺/辞退',
+    icon: '✅',
+    difficulty: '高级',
+    description: '接受或婉拒企业的录用（内定），措辞需格外得体',
+    fields: [
+      { id: 'decision',  label: '承诺还是辞退',   placeholder: '例：内定を承諾したく / 誠に恐縮ながら辞退を' },
+      { id: 'reason',    label: '辞退理由（可选）', placeholder: '例：諸般の事情により（不必详述）' },
+      { id: 'gratitude', label: '感谢之词',       placeholder: '例：選考を通じて大変お世話になりました' },
+    ],
+    keigo_tips: [
+      '辞退要尽早，越拖越失礼；语气务必诚恳致歉',
+      '辞退理由不必详述，「諸般の事情により」即可，但道歉要真诚',
+      '承诺要表达干劲与感谢，让对方安心',
+      '无论承诺辞退，都要感谢对方提供的選考机会',
+    ],
+    cushion: '「この度は内定のご連絡をいただき、誠にありがとうございます」',
+  },
 ];
 
 const emailState = {
@@ -765,15 +868,26 @@ function exitEmailMode() {
   document.getElementById('sec-0').classList.add('active');
 }
 
+const EMAIL_CATEGORIES = [
+  { id: 'academic', label: '给教授 / 导师', icon: '🎓' },
+  { id: 'jobhunt',  label: '求职 / 就活',   icon: '💼' },
+];
+
 function renderEmailSceneGrid() {
   const grid = document.getElementById('email-scene-grid');
-  grid.innerHTML = EMAIL_SCENES.map(s => `
+  const card = s => `
     <div class="email-scene-card" id="esc-${s.id}" onclick="selectEmailScene('${s.id}', this)">
       <div class="esc-icon">${s.icon}</div>
       <div class="esc-title">${esc(s.title)}</div>
       <div class="esc-difficulty">${esc(s.difficulty)}</div>
       <div class="esc-desc">${esc(s.description)}</div>
-    </div>`).join('');
+    </div>`;
+  grid.innerHTML = EMAIL_CATEGORIES.map(cat => {
+    const scenes = EMAIL_SCENES.filter(s => (s.category || 'academic') === cat.id);
+    if (!scenes.length) return '';
+    return `<div class="email-cat-header"><span class="icon">${cat.icon}</span>${cat.label}</div>`
+      + scenes.map(card).join('');
+  }).join('');
 }
 
 function selectEmailScene(sceneId, el) {
@@ -800,6 +914,7 @@ function startEmailWrite() {
   document.getElementById('keigo-tips-toggle').textContent = '展开 ▼';
   renderEmailKeyFields();
   renderKeigoTips();
+  renderEmailFormatPanel();
   goEmailStep(1);
 }
 
@@ -816,6 +931,34 @@ function renderEmailKeyFields() {
 function renderKeigoTips() {
   document.getElementById('email-keigo-tips').innerHTML =
     emailState.scene.keigo_tips.map(t => `<div class="keigo-tip-item">• ${esc(t)}</div>`).join('');
+}
+
+const EMAIL_FORMAT_TEMPLATES = {
+  academic: [
+    ['宛名', '〇〇先生 / 〇〇教授'],
+    ['名乗り', '〇〇学部〇年の〇〇と申します。'],
+    ['挨拶', 'いつもお世話になっております。'],
+    ['用件', '（本題を一文で明確に）'],
+    ['本文', '（詳細・依頼・質問内容）'],
+    ['結び', 'どうぞよろしくお願いいたします。'],
+    ['署名', '氏名 / 学籍番号 / 連絡先'],
+  ],
+  jobhunt: [
+    ['宛名', '株式会社〇〇 採用ご担当者様 / 人事部 〇〇様'],
+    ['名乗り', '〇〇大学〇〇学部の〇〇と申します。'],
+    ['挨拶', 'お世話になっております。（初回は「突然のご連絡失礼いたします」）'],
+    ['用件', '（応募・日程・お礼など、目的を一文で）'],
+    ['本文', '（具体的な内容・志望度・依頼）'],
+    ['結び', '何卒よろしくお願い申し上げます。'],
+    ['署名', '大学名 / 氏名 / 電話 / メール'],
+  ],
+};
+
+function renderEmailFormatPanel() {
+  const tmpl = EMAIL_FORMAT_TEMPLATES[emailState.scene.category] || EMAIL_FORMAT_TEMPLATES.academic;
+  document.getElementById('email-format-box').innerHTML = tmpl
+    .map(([tag, val]) => `<div class="email-format-line"><span class="email-format-tag">${esc(tag)}</span>${esc(val)}</div>`)
+    .join('');
 }
 
 function toggleEmailFormat() {
@@ -840,8 +983,10 @@ function updateEmailCounter(el) {
 
 function buildKeyInfoString() {
   return emailState.scene.fields
-    .map(f => `${f.label}：${emailState.keyInfo[f.id] || '（未填）'}`)
-    .join('\n');
+    .map(f => ({ label: f.label, val: (emailState.keyInfo[f.id] || '').trim() }))
+    .filter(x => x.val)
+    .map(x => `${x.label}：${x.val}`)
+    .join('\n') || '（未提供具体要素，请按场景常规写法示范）';
 }
 
 async function submitEmailCorrect() {
@@ -854,16 +999,18 @@ async function submitEmailCorrect() {
 
   try {
     const result = await api('/api/email/correct', {
-      scene_id:    emailState.scene.id,
-      scene_title: emailState.scene.title,
-      key_info:    buildKeyInfoString(),
-      email_draft: draft,
+      scene_id:       emailState.scene.id,
+      scene_title:    emailState.scene.title,
+      scene_category: emailState.scene.category || 'academic',
+      key_info:       buildKeyInfoString(),
+      email_draft:    draft,
     });
     emailState.correction = result;
     emailState.modelEmailPromise = api('/api/email/model', {
-      scene_id:    emailState.scene.id,
-      scene_title: emailState.scene.title,
-      key_info:    buildKeyInfoString(),
+      scene_id:       emailState.scene.id,
+      scene_title:    emailState.scene.title,
+      scene_category: emailState.scene.category || 'academic',
+      key_info:       buildKeyInfoString(),
     });
     emailState.modelEmailPromise.catch(() => {});
     renderEmailCorrection(result);
@@ -982,9 +1129,10 @@ async function loadEmailModel() {
   hide('email-model-content');
   try {
     const data = await (emailState.modelEmailPromise || api('/api/email/model', {
-      scene_id:    emailState.scene.id,
-      scene_title: emailState.scene.title,
-      key_info:    buildKeyInfoString(),
+      scene_id:       emailState.scene.id,
+      scene_title:    emailState.scene.title,
+      scene_category: emailState.scene.category || 'academic',
+      key_info:       buildKeyInfoString(),
     }));
     renderEmailModel(data);
     show('email-model-content');

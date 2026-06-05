@@ -300,6 +300,7 @@ async def history(user_id: str):
 class EmailCorrectRequest(BaseModel):
     scene_id: str
     scene_title: str
+    scene_category: str = "academic"  # academic | jobhunt | business
     key_info: str
     email_draft: str
 
@@ -307,7 +308,12 @@ class EmailCorrectRequest(BaseModel):
 class EmailModelRequest(BaseModel):
     scene_id: str
     scene_title: str
+    scene_category: str = "academic"
     key_info: str
+
+
+def email_context(category: str) -> str:
+    return prompts.EMAIL_CONTEXTS.get(category, prompts.EMAIL_CONTEXTS["academic"])
 
 
 @app.post("/api/email/correct")
@@ -315,7 +321,7 @@ async def email_correct(req: EmailCorrectRequest):
     if len(req.email_draft.strip()) < 30:
         raise HTTPException(status_code=400, detail="邮件内容太短，请至少写30字")
     result_str = chat_json(
-        system=prompts.EMAIL_CORRECTION_SYSTEM,
+        system=prompts.EMAIL_CORRECTION_SYSTEM.format(scene_context=email_context(req.scene_category)),
         user=prompts.EMAIL_CORRECTION_USER.format(
             scene_title=req.scene_title,
             key_info=req.key_info,
@@ -328,7 +334,7 @@ async def email_correct(req: EmailCorrectRequest):
 @app.post("/api/email/model")
 async def email_model(req: EmailModelRequest):
     result_str = chat_json(
-        system=prompts.EMAIL_MODEL_SYSTEM,
+        system=prompts.EMAIL_MODEL_SYSTEM.format(scene_context=email_context(req.scene_category)),
         user=prompts.EMAIL_MODEL_USER.format(
             scene_title=req.scene_title,
             key_info=req.key_info,

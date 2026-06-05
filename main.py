@@ -1,13 +1,17 @@
 import json
+import logging
+import os
 import random
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from openai import OpenAIError
 from pydantic import BaseModel
 
 import data_loader
+import llm_client
 import prompts
 from database import (
     create_session,
@@ -20,6 +24,9 @@ from database import (
 )
 from llm_client import chat, chat_json
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("jwritecoach")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,6 +36,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="JWriteCoach", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# ---- Error handling ----
+
+@app.exception_handler(OpenAIError)
+async def llm_error_handler(request: Request, exc: OpenAIError):
+    # The real cause (bad/missing API key, rate limit, network) is logged
+    # server-side; the client only gets a clear, non-leaky message.
+    logger.error("LLM API error on %s: %s: %s", request.url.path, type(exc).__name__, exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "AI 服务暂时不可用，请稍后再试。（如持续出现，请管理员检查服务器的 DEEPSEEK_API_KEY 配置）"},
+    )
 
 
 # ---- Request models ----
@@ -73,6 +93,34 @@ def fmt_reasons(reasons: list[str]) -> str:
 @app.get("/")
 async def root():
     return FileResponse("static/index.html")
+
+
+@app.get("/api/health")
+async def health():
+    """Self-check: is the API key configured and can we reach DeepSeek?
+    Returns 200 when healthy, 503 otherwise. Never leaks the key value."""
+    key = os.getenv("DEEPSEEK_API_KEY")
+    configured = bool(key and key.strip())
+    info = {
+        "status": "unknown",
+        "key_configured": configured,
+        "key_fingerprint": f"{key[:6]}…{key[-4:]}" if configured else None,
+        "llm_reachable": False,
+        "error": None,
+    }
+    if not configured:
+        info["status"] = "error"
+        info["error"] = "DEEPSEEK_API_KEY 未配置"
+        return JSONResponse(status_code=503, content=info)
+    try:
+        llm_client.ping()
+        info["llm_reachable"] = True
+        info["status"] = "ok"
+        return info
+    except Exception as e:
+        info["status"] = "error"
+        info["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+        return JSONResponse(status_code=503, content=info)
 
 
 @app.get("/api/topic")

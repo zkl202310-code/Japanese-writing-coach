@@ -42,3 +42,13 @@ def chat_json(system: str, user: str) -> str:
         response_format={"type": "json_object"},
     )
     return response.choices[0].message.content
+
+
+def ping() -> None:
+    """Minimal call to verify the API key + connectivity. Raises on failure."""
+    client = get_client()
+    client.chat.completions.create(
+        model="deepseek-v4-pro",
+        messages=[{"role": "user", "content": "ping"}],
+        max_tokens=1,
+    )

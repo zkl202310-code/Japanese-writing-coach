@@ -163,9 +163,11 @@ async def review_plan(req: PlanRequest):
         status="writing",
     )
 
-    # The prompt always ends with either 【可以开始写作】 or 【建议先调整计划】.
-    # Treat "needs adjustment" as the only blocking signal; default to proceed otherwise.
-    can_proceed = "【建议先调整计划】" not in feedback
+    # The prompt asks the model to end with 【可以开始写作】 or 【建议先调整计划】,
+    # but it sometimes wraps the verdict differently (**…**, no brackets, etc.).
+    # Match the distinctive phrase regardless of wrapper; treat "needs adjustment"
+    # as the only blocking signal and default to proceed otherwise.
+    can_proceed = "建议先调整计划" not in feedback
 
     return {"session_id": session_id, "feedback": feedback, "can_proceed": can_proceed}
 

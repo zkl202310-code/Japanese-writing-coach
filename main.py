@@ -100,30 +100,48 @@ async def root():
 
 @app.get("/api/health")
 async def health():
-    """Self-check: is the API key configured and can we reach DeepSeek?
-    Returns 200 when healthy, 503 otherwise. Never leaks the key value."""
+    """Self-check: DeepSeek key configured/reachable + which DB backend is live.
+    Returns 200 when healthy, 503 otherwise. Never leaks secrets."""
+    import database
+
     key = os.getenv("DEEPSEEK_API_KEY")
     configured = bool(key and key.strip())
+    # env var set but not recognized as postgres:// usually means a paste
+    # error (quotes/spaces/truncation) — surface that distinctly.
+    db_url_set = bool(os.getenv("DATABASE_URL", "").strip())
     info = {
         "status": "unknown",
         "key_configured": configured,
         "key_fingerprint": f"{key[:6]}…{key[-4:]}" if configured else None,
         "llm_reachable": False,
+        "db_backend": "postgres" if database.IS_PG else "sqlite",
+        "db_url_set": db_url_set,
+        "db_reachable": False,
         "error": None,
     }
+    try:
+        conn = database.get_db()
+        conn.execute("SELECT 1")
+        conn.close()
+        info["db_reachable"] = True
+    except Exception as e:
+        info["error"] = f"DB: {type(e).__name__}: {str(e)[:200]}"
     if not configured:
         info["status"] = "error"
-        info["error"] = "DEEPSEEK_API_KEY 未配置"
+        info["error"] = (info["error"] or "") + " DEEPSEEK_API_KEY 未配置"
         return JSONResponse(status_code=503, content=info)
     try:
         llm_client.ping()
         info["llm_reachable"] = True
-        info["status"] = "ok"
-        return info
     except Exception as e:
         info["status"] = "error"
-        info["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+        info["error"] = (info["error"] or "") + f" LLM: {type(e).__name__}: {str(e)[:200]}"
         return JSONResponse(status_code=503, content=info)
+    if not info["db_reachable"]:
+        info["status"] = "error"
+        return JSONResponse(status_code=503, content=info)
+    info["status"] = "ok"
+    return info
 
 
 @app.get("/api/topic")

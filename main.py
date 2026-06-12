@@ -33,7 +33,13 @@ logger = logging.getLogger("jwritecoach")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    try:
+        init_db()
+    except Exception:
+        # Don't kill the deploy over a broken DB config: a startup crash makes
+        # Render roll back silently to the old instance, hiding the cause.
+        # Keep serving so /api/health can report the actual DB error.
+        logger.exception("init_db failed; continuing so /api/health can diagnose")
     yield
 
 

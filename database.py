@@ -8,7 +8,10 @@ import json
 #   This is the fix for ephemeral filesystems: Render's free tier wipes the
 #   local SQLite file on every redeploy, resetting all learning history.
 # - otherwise -> local SQLite file, so local dev stays zero-config.
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Sanitize the URL: values pasted from line-wrapped terminal output can carry
+# stray newlines/spaces mid-string (and sometimes wrapping quotes). A URL never
+# legitimately contains whitespace, so collapsing it reconstructs the original.
+DATABASE_URL = "".join(os.getenv("DATABASE_URL", "").split()).strip("'\"")
 IS_PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 if IS_PG:

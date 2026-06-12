@@ -45,14 +45,12 @@ uvicorn main:app --reload --port 8002
 
 ## 数据持久化（部署注意）
 
-SQLite 数据库默认写在本地文件 `writing_coach.db`。在 Railway 等平台上，文件系统是**临时的**——每次重新部署都会清空数据，导致「学习记录」重置。
+数据库支持两种后端，按环境变量自动选择：
 
-要让学习记录长期保留，需在 Railway 上：
+- **Postgres（推荐线上使用）**：设置环境变量 `DATABASE_URL`（`postgres://...`），学习记录长期保留。可使用 [Neon](https://neon.tech) 等免费托管 Postgres——在 Render 等免费平台上，本地文件系统是**临时的**，每次重新部署都会清空 SQLite 文件，导致「学习记录」重置，外部 Postgres 是根治方案。Neon 建议使用 **pooled connection string**（带 `-pooler` 的连接串）。
+- **SQLite（默认，本地开发零配置）**：不设 `DATABASE_URL` 时写本地文件 `writing_coach.db`，可用 `DB_PATH` 改路径（如平台提供持久卷：`DB_PATH=/data/writing_coach.db`）。
 
-1. 添加一个 **Volume**，挂载到任意目录（如 `/data`）；
-2. 设置环境变量 `DB_PATH=/data/writing_coach.db`。
-
-未配置时应用仍可正常运行，仅学习记录会随重新部署清空。
+两种后端 schema 与行为一致，未配置 `DATABASE_URL` 时应用照常运行，仅学习记录会随重新部署清空。
 
 ## 项目背景
 

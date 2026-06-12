@@ -3,33 +3,60 @@ import sqlite3
 import uuid
 import json
 
-# DB_PATH is env-configurable so production can point at a persistent volume.
-# On Railway: add a Volume mounted at /data and set DB_PATH=/data/writing_coach.db,
-# otherwise the SQLite file lives on the ephemeral filesystem and is wiped on every redeploy.
+# Two backends, picked at import time:
+# - DATABASE_URL set (postgres://...) -> external Postgres (e.g. Neon free tier).
+#   This is the fix for ephemeral filesystems: Render's free tier wipes the
+#   local SQLite file on every redeploy, resetting all learning history.
+# - otherwise -> local SQLite file, so local dev stays zero-config.
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+IS_PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+if IS_PG:
+    import psycopg
+    from psycopg.rows import dict_row
+
+# DB_PATH is env-configurable so a platform with a persistent volume can point
+# the SQLite file at it (e.g. DB_PATH=/data/writing_coach.db). Ignored when
+# DATABASE_URL is set.
 DB_PATH = os.getenv("DB_PATH", "writing_coach.db")
 
 
 def get_db():
+    if IS_PG:
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
+def q(sql: str) -> str:
+    """All queries below are written in SQLite paramstyle (?); Postgres wants %s."""
+    return sql.replace("?", "%s") if IS_PG else sql
+
+
 def _ensure_column(conn, table: str, column: str, ddl: str):
-    """Add a column if an older DB file predates it (idempotent migration)."""
+    """Add a column if an older SQLite DB file predates it (idempotent migration)."""
     cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
 
 def init_db():
-    # Make sure the parent directory of a volume-mounted DB exists.
-    parent = os.path.dirname(DB_PATH)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
+    if IS_PG:
+        autoinc_id = "BIGSERIAL PRIMARY KEY"
+        # Match SQLite's datetime('now') text format so ORDER BY and the
+        # frontend's date slicing behave identically on both backends.
+        now_text = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
+    else:
+        # Make sure the parent directory of a volume-mounted DB exists.
+        parent = os.path.dirname(DB_PATH)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        autoinc_id = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        now_text = "datetime('now')"
 
-    conn = get_db()
-    conn.executescript("""
+    statements = [
+        f"""
         CREATE TABLE IF NOT EXISTS writing_sessions (
             id TEXT PRIMARY KEY,
             user_id TEXT,
@@ -45,18 +72,18 @@ def init_db():
             reflection_json TEXT,
             model_essay_json TEXT,
             status TEXT DEFAULT 'plan',
-            created_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT ({now_text}),
             completed_at TEXT
-        );
-
+        )""",
+        f"""
         CREATE TABLE IF NOT EXISTS error_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {autoinc_id},
             writing_session_id TEXT,
             error_type TEXT,
             count INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-
+            created_at TEXT DEFAULT ({now_text})
+        )""",
+        f"""
         CREATE TABLE IF NOT EXISTS email_sessions (
             id TEXT PRIMARY KEY,
             user_id TEXT,
@@ -66,17 +93,18 @@ def init_db():
             key_info TEXT,
             email_draft TEXT,
             correction_json TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-    """)
-    # Idempotent migration for DB files created before user_id existed.
-    _ensure_column(conn, "writing_sessions", "user_id", "user_id TEXT")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sessions_user ON writing_sessions(user_id, created_at)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_email_sessions_user ON email_sessions(user_id, created_at)"
-    )
+            created_at TEXT DEFAULT ({now_text})
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user ON writing_sessions(user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_email_sessions_user ON email_sessions(user_id, created_at)",
+    ]
+
+    conn = get_db()
+    for stmt in statements:
+        conn.execute(stmt)
+    if not IS_PG:
+        # Idempotent migration for SQLite DB files created before user_id existed.
+        _ensure_column(conn, "writing_sessions", "user_id", "user_id TEXT")
     conn.commit()
     conn.close()
 
@@ -85,7 +113,7 @@ def create_session(exam_type: str, topic_text: str, user_id: str | None = None) 
     session_id = str(uuid.uuid4())
     conn = get_db()
     conn.execute(
-        "INSERT INTO writing_sessions (id, user_id, exam_type, topic_text) VALUES (?, ?, ?, ?)",
+        q("INSERT INTO writing_sessions (id, user_id, exam_type, topic_text) VALUES (?, ?, ?, ?)"),
         (session_id, user_id, exam_type, topic_text),
     )
     conn.commit()
@@ -99,7 +127,7 @@ def update_session(session_id: str, **kwargs):
     set_clause = ", ".join(f"{k} = ?" for k in kwargs)
     values = list(kwargs.values()) + [session_id]
     conn = get_db()
-    conn.execute(f"UPDATE writing_sessions SET {set_clause} WHERE id = ?", values)
+    conn.execute(q(f"UPDATE writing_sessions SET {set_clause} WHERE id = ?"), values)
     conn.commit()
     conn.close()
 
@@ -107,7 +135,7 @@ def update_session(session_id: str, **kwargs):
 def get_session(session_id: str) -> dict | None:
     conn = get_db()
     row = conn.execute(
-        "SELECT * FROM writing_sessions WHERE id = ?", (session_id,)
+        q("SELECT * FROM writing_sessions WHERE id = ?"), (session_id,)
     ).fetchone()
     conn.close()
     return dict(row) if row else None
@@ -118,7 +146,7 @@ def save_error_records(session_id: str, error_summary: dict):
     for error_type, count in error_summary.items():
         if count > 0:
             conn.execute(
-                "INSERT INTO error_records (writing_session_id, error_type, count) VALUES (?, ?, ?)",
+                q("INSERT INTO error_records (writing_session_id, error_type, count) VALUES (?, ?, ?)"),
                 (session_id, error_type, count),
             )
     conn.commit()
@@ -134,13 +162,13 @@ def get_user_history(user_id: str, limit: int = 30) -> list[dict]:
     """Return the user's completed/corrected sessions, newest first, with parsed summaries."""
     conn = get_db()
     rows = conn.execute(
-        """
+        q("""
         SELECT id, exam_type, topic_text, plan_position, correction_json, created_at, status
         FROM writing_sessions
         WHERE user_id = ? AND correction_json IS NOT NULL
         ORDER BY created_at DESC
         LIMIT ?
-        """,
+        """),
         (user_id, limit),
     ).fetchall()
     conn.close()
@@ -216,9 +244,9 @@ def save_email_session(
     session_id = str(uuid.uuid4())
     conn = get_db()
     conn.execute(
-        """INSERT INTO email_sessions
+        q("""INSERT INTO email_sessions
            (id, user_id, scene_id, scene_title, scene_category, key_info, email_draft, correction_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""),
         (session_id, user_id, scene_id, scene_title, scene_category, key_info, email_draft, correction_json),
     )
     conn.commit()
@@ -230,13 +258,13 @@ def get_email_history(user_id: str, limit: int = 30) -> list[dict]:
     """Return the user's corrected emails, newest first, with parsed scores."""
     conn = get_db()
     rows = conn.execute(
-        """
+        q("""
         SELECT id, scene_id, scene_title, scene_category, email_draft, correction_json, created_at
         FROM email_sessions
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT ?
-        """,
+        """),
         (user_id, limit),
     ).fetchall()
     conn.close()

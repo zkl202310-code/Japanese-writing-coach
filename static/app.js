@@ -497,10 +497,13 @@ async function openHistory() {
   hide('history-content');
   try {
     const data = await api(`/api/history?user_id=${encodeURIComponent(USER_ID)}`);
-    if (!data.sessions || data.sessions.length === 0) {
+    const hasEssays = data.sessions && data.sessions.length > 0;
+    const hasEmails = data.email_sessions && data.email_sessions.length > 0;
+    if (!hasEssays && !hasEmails) {
       show('history-empty');
     } else {
-      renderHistory(data);
+      if (hasEssays) { renderHistory(data); show('history-essay-wrap'); } else { hide('history-essay-wrap'); }
+      if (hasEmails) { renderEmailHistory(data); show('history-email-wrap'); } else { hide('history-email-wrap'); }
       show('history-content');
     }
   } catch (e) {
@@ -594,6 +597,89 @@ function renderHistory(data) {
         </div>
         <div class="hist-topic">${esc((s.topic_text || '').slice(0, 60))}${(s.topic_text || '').length > 60 ? '…' : ''}</div>
         <div class="hist-badges">${badges || '<span class="section-sub" style="font-size:11px">无批注</span>'}</div>
+      </div>`;
+  });
+}
+
+// -------- Email history (Track 2) --------
+
+const EMAIL_CAT_ICONS = { academic: '🎓', jobhunt: '💼', business: '🏢' };
+
+function renderEmailHistory(data) {
+  const stats = data.email_stats || {};
+  const sessions = data.email_sessions || [];
+
+  // Stat cards
+  const weakDim = stats.weakest_dim ? SCORE_DIM_LABELS[stats.weakest_dim] : null;
+  document.getElementById('history-email-stat-cards').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-num">${stats.total_sessions || 0}</div>
+      <div class="stat-cap">累计邮件</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">${stats.avg_total || 0}<span style="font-size:13px;color:var(--gray-400)">/40</span></div>
+      <div class="stat-cap">平均总分</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="font-size:18px">${weakDim ? weakDim.label : '—'}</div>
+      <div class="stat-cap">最需强化</div>
+    </div>`;
+
+  // Per-dimension average score bars (0-10, higher = better)
+  const dimAvgs = stats.dim_avgs || {};
+  const barsEl = document.getElementById('history-email-bars');
+  barsEl.innerHTML = '';
+  Object.entries(SCORE_DIM_LABELS).forEach(([dim, info]) => {
+    const avg = dimAvgs[dim] || 0;
+    const pct = Math.round((avg / 10) * 100);
+    barsEl.innerHTML += `
+      <div class="err-bar-row">
+        <span class="err-bar-label wide">${info.label}</span>
+        <div class="err-bar-track">
+          <div class="err-bar-fill" style="width:${avg ? Math.max(pct, 6) : 0}%;background:${scoreColor(avg)}"></div>
+        </div>
+        <span class="err-bar-num">${avg}</span>
+      </div>`;
+  });
+
+  // Trend chart (total score per email, oldest → newest; taller = better)
+  const trend = stats.trend || [];
+  const trendEl = document.getElementById('history-email-trend');
+  trendEl.innerHTML = '';
+  if (trend.length === 0) {
+    trendEl.innerHTML = '<span class="section-sub">暂无足够数据</span>';
+  } else {
+    trend.forEach((t, i) => {
+      const h = Math.max(6, Math.round((t.total / 40) * 90));
+      trendEl.innerHTML += `
+        <div class="trend-bar-wrap" title="第${i + 1}封 · ${t.total}/40（${t.grade}）">
+          <span class="trend-val">${t.total}</span>
+          <div class="trend-bar" style="height:${h}px"></div>
+          <span class="trend-idx">${i + 1}</span>
+        </div>`;
+    });
+  }
+
+  // Session list
+  const listEl = document.getElementById('history-email-list');
+  listEl.innerHTML = '';
+  sessions.forEach(s => {
+    const date = (s.created_at || '').replace('T', ' ').slice(0, 16);
+    const catIcon = EMAIL_CAT_ICONS[s.scene_category] || '📧';
+    const dimBadges = Object.entries(SCORE_DIM_LABELS)
+      .map(([dim, info]) => {
+        const v = (s.dims || {})[dim] || 0;
+        return `<span class="stat-badge" style="font-size:10px;color:${scoreColor(v)}">${info.label} ${v}</span>`;
+      }).join('');
+    listEl.innerHTML += `
+      <div class="hist-item">
+        <div class="hist-item-head">
+          <span class="hist-exam">${catIcon} ${esc(s.scene_title || '')}</span>
+          <span class="hist-level">${esc(s.grade || '—')} · ${s.total || 0}/40</span>
+          <span class="hist-date">${date}</span>
+        </div>
+        <div class="hist-topic">${esc(s.draft_preview || '')}${(s.draft_preview || '').length >= 60 ? '…' : ''}</div>
+        <div class="hist-badges">${dimBadges}</div>
       </div>`;
   });
 }
@@ -817,6 +903,90 @@ const EMAIL_SCENES = [
     ],
     cushion: '「この度は内定のご連絡をいただき、誠にありがとうございます」',
   },
+
+  // ---- 商务基础 / ビジネス ----
+  {
+    id: 'biz_irai',
+    category: 'business',
+    title: '业务请求/依頼',
+    icon: '🙇',
+    difficulty: '中级',
+    description: '请同事或合作方协助处理事务、提供资料（依頼メール）',
+    fields: [
+      { id: 'recipient', label: '收件对象',         placeholder: '例：株式会社○○ ○○部 ○○様' },
+      { id: 'request',   label: '请求的具体内容',   placeholder: '例：○○の資料をお送りいただきたく' },
+      { id: 'deadline',  label: '希望期限',         placeholder: '例：○月○日（金）までに' },
+      { id: 'background', label: '背景说明（可选）', placeholder: '例：来週の会議で使用するため' },
+    ],
+    keigo_tips: [
+      '依頼内容和期限要具体明确，不要让对方猜——「なるべく早く」是大忌',
+      '「〜してください」过于直接 → 「〜していただけますでしょうか」「〜いただけますと幸いです」',
+      '简述理由让对方理解必要性，更容易获得配合',
+      '结尾用「ご検討のほど、よろしくお願いいたします」留出余地',
+    ],
+    cushion: '「お忙しいところ恐れ入りますが」',
+  },
+  {
+    id: 'biz_apo',
+    category: 'business',
+    title: '约定会议/拜访',
+    icon: '🗓️',
+    difficulty: '中级',
+    description: '与公司内外的工作对象约定打ち合わせ或拜访时间（アポ取り）',
+    fields: [
+      { id: 'purpose',      label: '会议/拜访目的', placeholder: '例：新プロジェクトのお打ち合わせ' },
+      { id: 'time_options', label: '候补时间（2-3个）', placeholder: '例：○月○日（火）14時〜 / ○日（木）10時〜' },
+      { id: 'format',       label: '形式（可选）',   placeholder: '例：オンライン（Zoom）/ 御社にお伺い' },
+      { id: 'duration',     label: '预计时长（可选）', placeholder: '例：1時間ほど' },
+    ],
+    keigo_tips: [
+      '提供2-3个候补时间让对方选，并补一句「上記以外でも調整可能です」',
+      '写明形式（対面/オンライン）和预计时长，方便对方安排',
+      '「ご都合いかがでしょうか」比「いつが空いていますか」礼貌得多',
+      '时间确定后要回一封确认邮件，复述日期·时间·地点',
+    ],
+    cushion: '「ご多忙のところ恐縮ですが」',
+  },
+  {
+    id: 'biz_soufu',
+    category: 'business',
+    title: '资料送付/报告',
+    icon: '📎',
+    difficulty: '初级',
+    description: '向对方发送资料、附件，或汇报工作进展（送付・報告メール）',
+    fields: [
+      { id: 'what',       label: '送付物/报告内容', placeholder: '例：お見積書 / ○○の進捗状況' },
+      { id: 'attachment', label: '附件文件名（可选）', placeholder: '例：見積書_株式会社○○様.pdf' },
+      { id: 'point',      label: '要点/补充说明（可选）', placeholder: '例：ご不明点がございましたらお知らせください' },
+    ],
+    keigo_tips: [
+      '有附件必须在正文提及：「○○を添付いたしますので、ご査収ください」',
+      '「ご査収ください」= 请查收确认，是送付メール的定番表达',
+      '报告要結論ファースト：先说结论/现状，再补充细节',
+      '大文件别直接发附件，先确认或改用文件传输服务',
+    ],
+    cushion: '「お手数をおかけしますが、ご確認のほどよろしくお願いいたします」',
+  },
+  {
+    id: 'biz_owabi',
+    category: 'business',
+    title: '道歉/お詫び',
+    icon: '🙏',
+    difficulty: '高级',
+    description: '因延误、失误等向对方致歉并提出补救措施（お詫びメール）',
+    fields: [
+      { id: 'what_happened',  label: '发生了什么',     placeholder: '例：納品が予定より遅れる / 資料に誤りがあった' },
+      { id: 'cause',          label: '原因（简述）',   placeholder: '例：確認不足により' },
+      { id: 'countermeasure', label: '补救措施/对策',  placeholder: '例：明日○時までに修正版をお送りします' },
+    ],
+    keigo_tips: [
+      '先道歉再解释——开头就致歉，不要先摆理由像在找借口',
+      '道歉程度分级：一般用「申し訳ございません」，重大失误用「深くお詫び申し上げます」',
+      '必须写明补救措施和今后的预防对策，重建信任',
+      '发现问题立刻联络，道歉越拖越失礼',
+    ],
+    cushion: '「この度はご迷惑をおかけし、誠に申し訳ございません」',
+  },
 ];
 
 const emailState = {
@@ -871,6 +1041,7 @@ function exitEmailMode() {
 const EMAIL_CATEGORIES = [
   { id: 'academic', label: '给教授 / 导师', icon: '🎓' },
   { id: 'jobhunt',  label: '求职 / 就活',   icon: '💼' },
+  { id: 'business', label: '商务基础 / ビジネス', icon: '🏢' },
 ];
 
 function renderEmailSceneGrid() {
@@ -952,6 +1123,15 @@ const EMAIL_FORMAT_TEMPLATES = {
     ['結び', '何卒よろしくお願い申し上げます。'],
     ['署名', '大学名 / 氏名 / 電話 / メール'],
   ],
+  business: [
+    ['宛名', '株式会社〇〇 〇〇部 〇〇様（会社・部署宛は「御中」）'],
+    ['名乗り', '〇〇株式会社の〇〇でございます。'],
+    ['挨拶', 'いつもお世話になっております。'],
+    ['用件', '（結論ファースト：目的を一文で明確に）'],
+    ['本文', '（詳細・依頼内容・日程・添付の言及など）'],
+    ['結び', '何卒よろしくお願い申し上げます。'],
+    ['署名', '会社名 / 部署 / 氏名 / 電話 / メール'],
+  ],
 };
 
 function renderEmailFormatPanel() {
@@ -1004,6 +1184,7 @@ async function submitEmailCorrect() {
       scene_category: emailState.scene.category || 'academic',
       key_info:       buildKeyInfoString(),
       email_draft:    draft,
+      user_id:        USER_ID,
     });
     emailState.correction = result;
     emailState.modelEmailPromise = api('/api/email/model', {

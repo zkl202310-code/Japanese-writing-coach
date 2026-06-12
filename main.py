@@ -15,10 +15,13 @@ import llm_client
 import prompts
 from database import (
     create_session,
+    get_email_history,
+    get_email_stats,
     get_session,
     get_user_history,
     get_user_stats,
     init_db,
+    save_email_session,
     save_error_records,
     update_session,
 )
@@ -292,6 +295,8 @@ async def history(user_id: str):
     return {
         "stats": get_user_stats(user_id),
         "sessions": get_user_history(user_id),
+        "email_stats": get_email_stats(user_id),
+        "email_sessions": get_email_history(user_id),
     }
 
 
@@ -303,6 +308,7 @@ class EmailCorrectRequest(BaseModel):
     scene_category: str = "academic"  # academic | jobhunt | business
     key_info: str
     email_draft: str
+    user_id: str | None = None
 
 
 class EmailModelRequest(BaseModel):
@@ -328,7 +334,20 @@ async def email_correct(req: EmailCorrectRequest):
             email_draft=req.email_draft,
         ),
     )
-    return safe_json(result_str)
+    result = safe_json(result_str)
+    save_email_session(
+        user_id=req.user_id,
+        scene_id=req.scene_id,
+        scene_title=req.scene_title,
+        scene_category=req.scene_category,
+        key_info=req.key_info,
+        email_draft=req.email_draft,
+        # Store the parsed-and-reserialized JSON: result_str may wrap the JSON
+        # in extra text (that's why safe_json exists), which would break
+        # json.loads when reading history back.
+        correction_json=json.dumps(result, ensure_ascii=False),
+    )
+    return result
 
 
 @app.post("/api/email/model")

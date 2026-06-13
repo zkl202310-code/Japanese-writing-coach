@@ -16,6 +16,7 @@ import prompts
 from database import (
     create_session,
     get_email_history,
+    get_email_session,
     get_email_stats,
     get_session,
     get_user_history,
@@ -324,6 +325,31 @@ async def history(user_id: str):
     }
 
 
+def _check_owner(row_user_id, requester_id):
+    """Reject reading another user's record. Rows that predate user tracking
+    (user_id IS NULL) stay readable so old history isn't orphaned."""
+    if row_user_id and row_user_id != requester_id:
+        raise HTTPException(status_code=403, detail="无权查看该记录")
+
+
+@app.get("/api/history/essay/{session_id}")
+async def history_essay_detail(session_id: str, user_id: str):
+    """Full correction of one past essay, for the history detail view."""
+    session = get_session(session_id)
+    if not session or not session["correction_json"]:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    _check_owner(session["user_id"], user_id)
+    return {
+        "kind": "essay",
+        "exam_type": session["exam_type"],
+        "topic_text": session["topic_text"],
+        "position": session["plan_position"],
+        "created_at": session["created_at"],
+        "draft_original": session["draft_original"] or "",
+        "correction": safe_json(session["correction_json"]),
+    }
+
+
 # ---- Track 2: Email Writing ----
 
 class EmailCorrectRequest(BaseModel):
@@ -372,6 +398,24 @@ async def email_correct(req: EmailCorrectRequest):
         correction_json=json.dumps(result, ensure_ascii=False),
     )
     return result
+
+
+@app.get("/api/history/email/{session_id}")
+async def history_email_detail(session_id: str, user_id: str):
+    """Full correction of one past email, for the history detail view."""
+    session = get_email_session(session_id)
+    if not session or not session["correction_json"]:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    _check_owner(session["user_id"], user_id)
+    return {
+        "kind": "email",
+        "scene_title": session["scene_title"],
+        "scene_category": session["scene_category"] or "academic",
+        "key_info": session["key_info"] or "",
+        "created_at": session["created_at"],
+        "email_draft": session["email_draft"] or "",
+        "correction": safe_json(session["correction_json"]),
+    }
 
 
 @app.post("/api/email/model")

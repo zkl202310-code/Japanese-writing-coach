@@ -519,6 +519,186 @@ function closeHistory() {
   document.getElementById('history-modal').style.display = 'none';
 }
 
+// -------- History detail: re-open one past essay / email --------
+
+function openDetailModal() {
+  document.getElementById('detail-body').innerHTML = '';
+  show('detail-loading');
+  document.getElementById('detail-modal').style.display = 'flex';
+}
+
+function closeDetail() {
+  document.getElementById('detail-modal').style.display = 'none';
+}
+
+function detailError(e) {
+  document.getElementById('detail-body').innerHTML =
+    `<div class="card" style="color:var(--red)">加载失败：${esc(e.message)}</div>`;
+}
+
+function fmtDate(s) {
+  return (s || '').replace('T', ' ').slice(0, 16);
+}
+
+async function openEssayDetail(sessionId) {
+  openDetailModal();
+  try {
+    const d = await api(`/api/history/essay/${encodeURIComponent(sessionId)}?user_id=${encodeURIComponent(USER_ID)}`);
+    document.getElementById('detail-body').innerHTML = essayDetailHtml(d);
+  } catch (e) {
+    detailError(e);
+  } finally {
+    hide('detail-loading');
+  }
+}
+
+async function openEmailDetail(sessionId) {
+  openDetailModal();
+  try {
+    const d = await api(`/api/history/email/${encodeURIComponent(sessionId)}?user_id=${encodeURIComponent(USER_ID)}`);
+    document.getElementById('detail-body').innerHTML = emailDetailHtml(d);
+  } catch (e) {
+    detailError(e);
+  } finally {
+    hide('detail-loading');
+  }
+}
+
+function essayDetailHtml(d) {
+  const c = d.correction || {};
+  const score = c.score_estimate || {};
+  const examName = EXAM_NAMES[d.exam_type] || d.exam_type || '';
+  const summary = c.error_summary || {};
+  const statBadges = Object.entries(summary)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => {
+      const info = ERROR_LABELS[t] || { label: t, cls: '' };
+      return `<span class="stat-badge ${info.cls}">${info.label} ${n}</span>`;
+    }).join('');
+  const anns = (c.annotations || []).map(a => {
+    const info = ERROR_LABELS[a.error_type] || { label: a.error_type, cls: '' };
+    return `
+      <div class="annotation-card">
+        <div class="annotation-header"><span class="stat-badge ${info.cls}" style="font-size:11px">${info.label}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span class="annotation-original">${esc(a.original)}</span>
+          <span class="annotation-arrow">→</span>
+          <span class="annotation-corrected">${esc(a.corrected)}</span>
+        </div>
+        <div class="annotation-explain">💡 ${esc(a.explanation_cn)}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="detail-meta">
+      <div class="detail-title">✍️ ${esc(examName)}</div>
+      <div class="detail-date">${fmtDate(d.created_at)}</div>
+    </div>
+    <div class="detail-topic"><strong>题目：</strong>${esc(d.topic_text || '')}</div>
+    ${d.position ? `<div class="detail-topic"><strong>立场：</strong>${esc(d.position)}</div>` : ''}
+    <div class="score-badge" style="margin:14px 0">📊 当时水平估计：${esc(score.level || '—')}　${esc(score.comment_cn || '')}</div>
+    ${statBadges ? `<div class="detail-stat-row">${statBadges}</div>` : ''}
+    ${d.draft_original ? `
+      <div class="card">
+        <div class="card-title"><span class="icon">📝</span>你当时的原文</div>
+        <div class="correction-essay">${esc(d.draft_original)}</div>
+      </div>` : ''}
+    <div class="card">
+      <div class="card-title"><span class="icon">✅</span>修改稿</div>
+      <div class="correction-essay">${esc(c.corrected_essay || '')}</div>
+    </div>
+    ${anns ? `<div class="card"><div class="card-title"><span class="icon">🔍</span>批注详情（${(c.annotations || []).length}处）</div>${anns}</div>` : ''}
+  `;
+}
+
+function emailDetailHtml(d) {
+  const c = d.correction || {};
+  const score = c.score || {};
+  const grade = score.grade || '—';
+  const gradeColor = { S: '#059669', A: '#2563EB', B: '#F59E0B', C: '#EF4444' }[grade] || '#6B7280';
+  const catIcon = EMAIL_CAT_ICONS[d.scene_category] || '📧';
+
+  const scoreGrid = `
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span>批改评分</div>
+      <div class="email-score-grid">
+        ${Object.entries(SCORE_DIM_LABELS).map(([k, v]) => `
+          <div class="email-score-card">
+            <div class="email-score-val" style="color:${scoreColor(score[k] || 0)}">${score[k] || 0}<span style="font-size:13px;color:var(--gray-400)">/10</span></div>
+            <div class="email-score-dim">${v.label}</div>
+            <div class="email-score-desc">${v.desc}</div>
+          </div>`).join('')}
+        <div class="email-score-card email-score-total">
+          <div class="email-score-val" style="color:${gradeColor};font-size:32px">${grade}</div>
+          <div class="email-score-dim">${score.total || 0} / 40</div>
+          <div class="email-score-desc">${esc(score.comment_cn || '')}</div>
+        </div>
+      </div>
+    </div>`;
+
+  const mistakes = c.keigo_mistakes || [];
+  const keigoHtml = mistakes.length ? `
+    <div class="card card-keigo-alert">
+      <div class="card-title"><span class="icon">⚠️</span>敬語错误详解（${mistakes.length}处）</div>
+      ${mistakes.map(m => `
+        <div class="keigo-mistake-item">
+          <span class="keigo-mistake-type">${esc(m.type)}</span>
+          <div class="keigo-mistake-row">
+            <span class="keigo-orig">${esc(m.original)}</span>
+            <span class="keigo-arrow">→</span>
+            <span class="keigo-fixed">${esc(m.corrected)}</span>
+          </div>
+          <div class="keigo-rule">📌 ${esc(m.rule)}</div>
+        </div>`).join('')}
+    </div>` : '';
+
+  const annotations = c.annotations || [];
+  const annHtml = annotations.length ? `
+    <div class="card">
+      <div class="card-title"><span class="icon">🔍</span>批注详情（${annotations.length}处）</div>
+      ${annotations.map(a => {
+        const info = EMAIL_ERROR_LABELS[a.error_type] || { label: a.error_type, cls: '' };
+        return `
+          <div class="annotation-item">
+            <span class="badge ${info.cls}">${info.label}</span>
+            <div class="annotation-change">
+              <span class="ann-orig">${esc(a.original)}</span>
+              <span class="ann-arrow">→</span>
+              <span class="ann-fixed">${esc(a.corrected)}</span>
+            </div>
+            <div class="annotation-exp">${esc(a.explanation_cn)}</div>
+          </div>`;
+      }).join('')}
+    </div>` : '';
+
+  const highlights = c.highlights || [];
+  const hlHtml = highlights.length ? `
+    <div class="card card-highlight">
+      <div class="card-title"><span class="icon">✨</span>做得好的地方</div>
+      ${highlights.map(h => `<div class="highlight-item">✓ ${esc(h)}</div>`).join('')}
+    </div>` : '';
+
+  return `
+    <div class="detail-meta">
+      <div class="detail-title">${catIcon} ${esc(d.scene_title || '')}</div>
+      <div class="detail-date">${fmtDate(d.created_at)}</div>
+    </div>
+    ${scoreGrid}
+    ${keigoHtml}
+    ${annHtml}
+    ${hlHtml}
+    ${d.email_draft ? `
+      <div class="card">
+        <div class="card-title"><span class="icon">📝</span>你当时写的邮件</div>
+        <div class="correction-essay">${esc(d.email_draft)}</div>
+      </div>` : ''}
+    <div class="card">
+      <div class="card-title"><span class="icon">✅</span>修改稿</div>
+      <div class="correction-essay">${esc(c.corrected_email || '')}</div>
+    </div>
+  `;
+}
+
 function renderHistory(data) {
   const stats = data.stats || {};
   const sessions = data.sessions || [];
@@ -589,7 +769,7 @@ function renderHistory(data) {
         return `<span class="stat-badge ${info.cls}" style="font-size:10px">${info.label} ${c}</span>`;
       }).join('');
     listEl.innerHTML += `
-      <div class="hist-item">
+      <div class="hist-item hist-item-click" onclick="openEssayDetail('${s.session_id}')">
         <div class="hist-item-head">
           <span class="hist-exam">${examName}</span>
           <span class="hist-level">${s.score_level || '—'}</span>
@@ -597,6 +777,7 @@ function renderHistory(data) {
         </div>
         <div class="hist-topic">${esc((s.topic_text || '').slice(0, 60))}${(s.topic_text || '').length > 60 ? '…' : ''}</div>
         <div class="hist-badges">${badges || '<span class="section-sub" style="font-size:11px">无批注</span>'}</div>
+        <div class="hist-open-hint">点击回看完整批改 →</div>
       </div>`;
   });
 }
@@ -672,7 +853,7 @@ function renderEmailHistory(data) {
         return `<span class="stat-badge" style="font-size:10px;color:${scoreColor(v)}">${info.label} ${v}</span>`;
       }).join('');
     listEl.innerHTML += `
-      <div class="hist-item">
+      <div class="hist-item hist-item-click" onclick="openEmailDetail('${s.session_id}')">
         <div class="hist-item-head">
           <span class="hist-exam">${catIcon} ${esc(s.scene_title || '')}</span>
           <span class="hist-level">${esc(s.grade || '—')} · ${s.total || 0}/40</span>
@@ -680,6 +861,7 @@ function renderEmailHistory(data) {
         </div>
         <div class="hist-topic">${esc(s.draft_preview || '')}${(s.draft_preview || '').length >= 60 ? '…' : ''}</div>
         <div class="hist-badges">${dimBadges}</div>
+        <div class="hist-open-hint">点击回看完整批改 →</div>
       </div>`;
   });
 }

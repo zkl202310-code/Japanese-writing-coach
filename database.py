@@ -257,6 +257,16 @@ def save_email_session(
     return session_id
 
 
+def get_email_session(session_id: str) -> dict | None:
+    """Fetch a single email session's full row (for the history detail view)."""
+    conn = get_db()
+    row = conn.execute(
+        q("SELECT * FROM email_sessions WHERE id = ?"), (session_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_email_history(user_id: str, limit: int = 30) -> list[dict]:
     """Return the user's corrected emails, newest first, with parsed scores."""
     conn = get_db()

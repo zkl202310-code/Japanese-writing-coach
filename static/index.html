@@ -499,6 +499,17 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="detail-modal" style="display:none" onclick="if(event.target===this)closeDetail()">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <button class="detail-back" onclick="closeDetail()">← 返回记录</button>
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div id="detail-loading" class="loading"><div class="spinner"></div> 加载中…</div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

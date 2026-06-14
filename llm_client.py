@@ -52,3 +52,65 @@ def ping() -> None:
         messages=[{"role": "user", "content": "ping"}],
         max_tokens=1,
     )
+
+
+# ---- Handwriting OCR (provider-agnostic, plug-and-play) ----
+# DeepSeek's chat API does NOT accept image input yet (verified 2026-06: it
+# rejects the `image_url` content variant). This is written in the OpenAI-
+# compatible image_url format that DeepSeek's vision update is expected to use,
+# so when it ships you flip OCR_ENABLED=1 (and set OCR_MODEL to the vision model
+# id) and it works — no code change. To use a different vision provider in the
+# meantime, point OCR_BASE_URL / OCR_API_KEY / OCR_MODEL at it.
+OCR_ENABLED = os.getenv("OCR_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+OCR_MODEL = os.getenv("OCR_MODEL", "deepseek-v4-pro")
+OCR_BASE_URL = os.getenv("OCR_BASE_URL", "https://api.deepseek.com")
+
+_ocr_client = None
+
+
+def _get_ocr_client() -> OpenAI:
+    global _ocr_client
+    if _ocr_client is None:
+        _ocr_client = OpenAI(
+            api_key=os.getenv("OCR_API_KEY") or os.getenv("DEEPSEEK_API_KEY"),
+            base_url=OCR_BASE_URL,
+        )
+    return _ocr_client
+
+
+class OCRUnavailable(Exception):
+    """Raised when image OCR isn't available (disabled, or model lacks vision)."""
+
+
+OCR_PROMPT = (
+    "あなたは日本語の手書き文字を読み取るOCRエンジンです。"
+    "画像に写っている手書きの作文・文章を、できるだけ正確にそのまま書き写してください。"
+    "改行や段落はそのまま保持し、本文のテキストだけを出力してください。"
+    "判読できない文字は［?］と記してください。"
+    "説明・前置き・コメントは一切付けないでください。"
+)
+
+
+def vision_ocr(image_urls: list[str]) -> str:
+    """Transcribe handwritten text from one or more image data-URLs.
+
+    Raises OCRUnavailable if OCR is off or the configured model can't take images.
+    """
+    if not OCR_ENABLED:
+        raise OCRUnavailable("OCR disabled (set OCR_ENABLED=1 once vision is available)")
+    client = _get_ocr_client()
+    content = [{"type": "text", "text": OCR_PROMPT}]
+    content += [{"type": "image_url", "image_url": {"url": u}} for u in image_urls]
+    try:
+        response = client.chat.completions.create(
+            model=OCR_MODEL,
+            messages=[{"role": "user", "content": content}],
+            temperature=0,
+        )
+    except Exception as e:
+        # The current DeepSeek API returns this when it can't accept images yet.
+        msg = str(e)
+        if "image_url" in msg and ("unknown variant" in msg or "expected" in msg):
+            raise OCRUnavailable("configured model does not support image input yet") from e
+        raise
+    return response.choices[0].message.content or ""

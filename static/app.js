@@ -110,8 +110,8 @@ const Q_TYPE_CONFIG = {
     hint: '↑ 这是赞否型题目，请选择或输入你的立场',
     placeholder: '例：SNSの普及に賛成（社会的つながりを深めるため）',
     quickBtns: [
-      { text: '✓ 赞成', value: '賛成（肯定的な立場）' },
-      { text: '✗ 反对', value: '反対（否定的な立場）' },
+      { text: '赞成', value: '賛成（肯定的な立場）' },
+      { text: '反对', value: '反対（否定的な立場）' },
       { text: '± 两面评价', value: '中立（両面から考える立場）' },
     ],
     reasonsLabel: '支持你立场的理由（关键词即可）',
@@ -173,7 +173,7 @@ async function loadTopic() {
     const data = await api(`/api/topic?exam_type=${state.examType}`);
     state.topic = data;
     document.getElementById('topic-display').textContent = data.text;
-    document.getElementById('topic-hint').textContent = data.hint ? `💡 参考方向：${data.hint}` : '';
+    document.getElementById('topic-hint').textContent = data.hint ? `参考方向：${data.hint}` : '';
     renderPositionUI(data.text);
   } catch (e) {
     document.getElementById('topic-display').textContent = '题目加载失败，请刷新重试。';
@@ -214,10 +214,10 @@ async function submitPlan() {
     document.getElementById('plan-feedback-text').textContent = data.feedback;
     const badge = document.getElementById('plan-status-badge');
     if (data.can_proceed) {
-      badge.innerHTML = '<span class="feedback-status status-ok">✓ 可以开始写作</span>';
+      badge.innerHTML = '<span class="feedback-status status-ok">可以开始写作</span>';
       document.getElementById('btn-to-write').style.display = 'inline-flex';
     } else {
-      badge.innerHTML = '<span class="feedback-status status-warn">⚠ 建议调整后再开始</span>';
+      badge.innerHTML = '<span class="feedback-status status-warn">建议调整后再开始</span>';
       document.getElementById('btn-to-write').style.display = 'inline-flex';
       document.getElementById('btn-to-write').textContent = '仍然开始写作 →';
     }
@@ -310,6 +310,56 @@ function backToWrite() {
   show('draft-btn-row');
 }
 
+// -------- Handwriting OCR (writing stage) --------
+// The control is hidden until /api/health reports ocr_enabled (one env switch).
+async function initOcrAvailability() {
+  try {
+    const h = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
+    if (h && h.ocr_enabled) show('ocr-row');
+  } catch (_) { /* leave hidden */ }
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function setOcrHint(msg, kind) {
+  const el = document.getElementById('ocr-hint');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'ocr-hint' + (kind ? ' ' + kind : '');
+}
+
+async function handleOcrFiles(input) {
+  const files = [...input.files].slice(0, 5);
+  input.value = '';  // allow re-selecting the same file
+  if (!files.length) return;
+  if (files.some(f => f.size > 6 * 1024 * 1024)) {
+    setOcrHint('单张图片请控制在 6MB 以内（可先压缩或截图）', 'warn');
+    return;
+  }
+  show('ocr-loading');
+  setOcrHint('');
+  try {
+    const images = await Promise.all(files.map(readAsDataURL));
+    const data = await api('/api/ocr', { images });
+    const ta = document.getElementById('draft-input');
+    const text = (data.text || '').trim();
+    ta.value = ta.value.trim() ? (ta.value.trim() + '\n' + text) : text;
+    updateCharCount();
+    setOcrHint('已识别并填入下方，请仔细核对、修正可能的误读后再提交', 'ok');
+  } catch (e) {
+    setOcrHint(e.message || '识别失败，请重试或手动输入', 'warn');
+  } finally {
+    hide('ocr-loading');
+  }
+}
+
 async function requestCorrection() {
   const draft = document.getElementById('draft-input').value.trim();
   if (!draft) return;
@@ -345,44 +395,133 @@ function prefetchModelEssay() {
 
 // -------- Step 3: Correction display --------
 
-function renderCorrection(data) {
-  // Score badge
-  const score = data.score_estimate || {};
-  document.getElementById('score-badge').innerHTML =
-    `<div class="score-badge">📊 当前水平估计：${score.level || '—'}&nbsp;&nbsp;${score.comment_cn || ''}</div>`;
+// Holds the current correction's annotations so the diagnostic-panel
+// interactions (filter / expand / accept / ignore / hover-link) can reach them.
+let corrAnns = [];
 
-  // Error stats
-  const statsEl = document.getElementById('error-stats');
-  statsEl.innerHTML = '';
+function renderCorrection(data) {
+  const score = data.score_estimate || {};
+  corrAnns = (data.annotations || []);
+
+  // --- Score overview (level + comment) ---
+  document.getElementById('score-badge').innerHTML = `
+    <div class="diag-score">
+      <div class="diag-score-level">${esc(score.level || '—')}</div>
+      <div class="diag-score-cap">当前水平估计</div>
+    </div>
+    ${score.comment_cn ? `<div class="diag-score-comment">${esc(score.comment_cn)}</div>` : ''}`;
+
+  // --- Corrected essay with inline error marks ---
+  // Mark by token-substitution on the raw text (so escaping never matches
+  // inside already-inserted markup), then escape, then expand tokens.
+  let raw = data.corrected_essay || '';
+  corrAnns.forEach((a, i) => {
+    const frag = a.corrected || '';
+    const pos = frag ? raw.indexOf(frag) : -1;
+    a._marked = pos >= 0;
+    if (pos >= 0) raw = raw.slice(0, pos) + `${i}` + raw.slice(pos + frag.length);
+  });
+  let html = esc(raw);
+  corrAnns.forEach((a, i) => {
+    if (!a._marked) return;
+    html = html.replace(`${i}`,
+      `<mark class="emark emark-${a.error_type}" id="emark-${i}" data-type="${a.error_type}"` +
+      ` onmouseenter="hlSug(${i},true)" onmouseleave="hlSug(${i},false)" onclick="jumpSug(${i})">` +
+      `${esc(a.corrected)}<sup class="emark-no">${i + 1}</sup></mark>`);
+  });
+  document.getElementById('corrected-essay').innerHTML = html;
+
+  // --- Category filter chips ---
   const summary = data.error_summary || {};
+  const total = Object.values(summary).reduce((s, v) => s + (parseInt(v) || 0), 0);
+  let chips = `<button class="diag-chip diag-chip--all is-active" data-type="__all" onclick="setCorrFilter('__all',this)">全部 ${total}</button>`;
   Object.entries(summary).forEach(([type, count]) => {
     if (count > 0) {
       const info = ERROR_LABELS[type] || { label: type, cls: '' };
-      statsEl.innerHTML += `<span class="stat-badge ${info.cls}">${info.label} ${count}</span>`;
+      chips += `<button class="diag-chip ${info.cls}" data-type="${type}" onclick="setCorrFilter('${type}',this)">${info.label} ${count}</button>`;
     }
   });
+  document.getElementById('error-stats').innerHTML = chips;
 
-  // Corrected essay
-  document.getElementById('corrected-essay').textContent = data.corrected_essay || '';
-
-  // Annotations
+  // --- Per-suggestion cards (expand / accept / ignore) ---
   const annEl = document.getElementById('annotations-list');
-  annEl.innerHTML = '';
-  (data.annotations || []).forEach(ann => {
-    const info = ERROR_LABELS[ann.error_type] || { label: ann.error_type, cls: '' };
-    annEl.innerHTML += `
-      <div class="annotation-card">
-        <div class="annotation-header">
-          <span class="stat-badge ${info.cls}" style="font-size:11px">${info.label}</span>
+  if (!corrAnns.length) {
+    annEl.innerHTML = '<div class="diag-empty">没有需要修改的地方，写得很好。</div>';
+    return;
+  }
+  annEl.innerHTML = corrAnns.map((a, i) => {
+    const info = ERROR_LABELS[a.error_type] || { label: a.error_type, cls: '' };
+    return `
+      <div class="sug" id="sug-${i}" data-type="${a.error_type}">
+        <button class="sug-head" onclick="toggleSug(${i})"
+          onmouseenter="hlMark(${i},true)" onmouseleave="hlMark(${i},false)">
+          <span class="sug-no">${i + 1}</span>
+          <span class="stat-badge ${info.cls} sug-tag">${info.label}</span>
+          <span class="sug-preview"><span class="sug-orig">${esc(a.original)}</span> → <span class="sug-fixed">${esc(a.corrected)}</span></span>
+          <span class="sug-caret"></span>
+        </button>
+        <div class="sug-body">
+          <div class="sug-change">
+            <span class="annotation-original">${esc(a.original)}</span>
+            <span class="annotation-arrow">→</span>
+            <span class="annotation-corrected">${esc(a.corrected)}</span>
+          </div>
+          <div class="annotation-explain">${esc(a.explanation_cn)}</div>
+          <div class="sug-actions">
+            <button class="sug-act sug-accept" onclick="markSug(${i},'accepted')">采纳</button>
+            <button class="sug-act sug-ignore" onclick="markSug(${i},'ignored')">忽略</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-          <span class="annotation-original">${esc(ann.original)}</span>
-          <span class="annotation-arrow">→</span>
-          <span class="annotation-corrected">${esc(ann.corrected)}</span>
-        </div>
-        <div class="annotation-explain">💡 ${esc(ann.explanation_cn)}</div>
       </div>`;
+  }).join('');
+}
+
+// ---- Diagnostic-panel interactions (client-only; no backend state) ----
+function setCorrFilter(type, btn) {
+  document.querySelectorAll('#error-stats .diag-chip').forEach(c => c.classList.remove('is-active'));
+  if (btn) btn.classList.add('is-active');
+  document.querySelectorAll('#annotations-list .sug').forEach(s => {
+    s.style.display = (type === '__all' || s.dataset.type === type) ? '' : 'none';
   });
+}
+
+function toggleSug(i) {
+  const el = document.getElementById(`sug-${i}`);
+  if (el) el.classList.toggle('is-open');
+}
+
+function markSug(i, stateName) {
+  const sug = document.getElementById(`sug-${i}`);
+  const mark = document.getElementById(`emark-${i}`);
+  const wasSet = sug && sug.classList.contains(`is-${stateName}`);
+  ['accepted', 'ignored'].forEach(s => {
+    if (sug) sug.classList.remove(`is-${s}`);
+    if (mark) mark.classList.remove(`is-${s}`);
+  });
+  if (!wasSet) {  // toggle off if clicking the same state again
+    if (sug) sug.classList.add(`is-${stateName}`);
+    if (mark) mark.classList.add(`is-${stateName}`);
+  }
+}
+
+// hover a suggestion -> highlight its inline mark
+function hlMark(i, on) {
+  const m = document.getElementById(`emark-${i}`);
+  if (m) m.classList.toggle('is-hot', on);
+}
+// hover an inline mark -> highlight its suggestion
+function hlSug(i, on) {
+  const s = document.getElementById(`sug-${i}`);
+  if (s) s.classList.toggle('is-hot', on);
+}
+// click an inline mark -> open + scroll its suggestion into view
+function jumpSug(i) {
+  const s = document.getElementById(`sug-${i}`);
+  if (!s) return;
+  s.classList.add('is-open');
+  s.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  s.classList.add('is-flash');
+  setTimeout(() => s.classList.remove('is-flash'), 900);
 }
 
 // -------- Step 4: Reflection --------
@@ -392,9 +531,12 @@ async function requestReflection() {
   try {
     const data = await api('/api/reflection', { session_id: state.sessionId });
     renderReflection(data);
+    // Gate: the learner summarizes first; system reflection + model essay
+    // stay hidden until revealReflection().
+    document.getElementById('self-reflect-input').value = '';
+    show('self-reflect-card');
+    hide('system-reflect');
     goToStep(4);
-    // Also kick off model essay async
-    loadModelEssay();
   } catch (e) {
     alert('生成反思失败：' + e.message);
   } finally {
@@ -402,12 +544,27 @@ async function requestReflection() {
   }
 }
 
+function revealReflection() {
+  const note = document.getElementById('self-reflect-input').value.trim();
+  const echo = document.getElementById('self-reflect-echo');
+  if (note) {
+    echo.innerHTML = `<div class="self-echo-label">你的自我总结</div>${esc(note)}`;
+    show('self-reflect-echo');
+  } else {
+    hide('self-reflect-echo');
+  }
+  hide('self-reflect-card');
+  show('system-reflect');
+  loadModelEssay();  // model essay was prefetched at correction time
+  document.getElementById('system-reflect').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderReflection(data) {
   // Highlights
   const hl = document.getElementById('highlights-list');
   hl.innerHTML = '';
   (data.highlights || []).forEach(h => {
-    hl.innerHTML += `<div class="highlight-item"><span class="highlight-check">✓</span><span>${esc(h)}</span></div>`;
+    hl.innerHTML += `<div class="highlight-item"><span class="ic ic-check highlight-check"></span><span>${esc(h)}</span></div>`;
   });
 
   // Patterns
@@ -422,8 +579,8 @@ function renderReflection(data) {
           <span class="pattern-count">${p.count} 处</span>
           <strong style="font-size:14px">${esc(p.label)}</strong>
         </div>
-        <div class="pattern-rule">📖 规律：${esc(p.rule_summary)}</div>
-        <div class="pattern-tip" style="margin-top:8px">🏋️ 练习建议：${esc(p.practice_tip)}</div>
+        <div class="pattern-rule">规律：${esc(p.rule_summary)}</div>
+        <div class="pattern-tip" style="margin-top:8px">练习建议：${esc(p.practice_tip)}</div>
       </div>`;
   });
 
@@ -480,6 +637,12 @@ function resetAll() {
   hide('plan-feedback-box');
   hide('socratic-box');
   show('draft-btn-row');
+
+  // Reset the reflection gate for the next round
+  const selfInput = document.getElementById('self-reflect-input');
+  if (selfInput) selfInput.value = '';
+  hide('system-reflect');
+  show('self-reflect-card');
 
   document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
   document.getElementById('btn-start').disabled = true;
@@ -585,29 +748,29 @@ function essayDetailHtml(d) {
           <span class="annotation-arrow">→</span>
           <span class="annotation-corrected">${esc(a.corrected)}</span>
         </div>
-        <div class="annotation-explain">💡 ${esc(a.explanation_cn)}</div>
+        <div class="annotation-explain">${esc(a.explanation_cn)}</div>
       </div>`;
   }).join('');
 
   return `
     <div class="detail-meta">
-      <div class="detail-title">✍️ ${esc(examName)}</div>
+      <div class="detail-title">${esc(examName)}</div>
       <div class="detail-date">${fmtDate(d.created_at)}</div>
     </div>
     <div class="detail-topic"><strong>题目：</strong>${esc(d.topic_text || '')}</div>
     ${d.position ? `<div class="detail-topic"><strong>立场：</strong>${esc(d.position)}</div>` : ''}
-    <div class="score-badge" style="margin:14px 0">📊 当时水平估计：${esc(score.level || '—')}　${esc(score.comment_cn || '')}</div>
+    <div class="score-badge" style="margin:14px 0">当时水平估计：${esc(score.level || '—')}　${esc(score.comment_cn || '')}</div>
     ${statBadges ? `<div class="detail-stat-row">${statBadges}</div>` : ''}
     ${d.draft_original ? `
       <div class="card">
-        <div class="card-title"><span class="icon">📝</span>你当时的原文</div>
+        <div class="card-title"><span class="ic ic-doc"></span>你当时的原文</div>
         <div class="correction-essay">${esc(d.draft_original)}</div>
       </div>` : ''}
     <div class="card">
-      <div class="card-title"><span class="icon">✅</span>修改稿</div>
+      <div class="card-title"><span class="ic ic-check"></span>修改稿</div>
       <div class="correction-essay">${esc(c.corrected_essay || '')}</div>
     </div>
-    ${anns ? `<div class="card"><div class="card-title"><span class="icon">🔍</span>批注详情（${(c.annotations || []).length}处）</div>${anns}</div>` : ''}
+    ${anns ? `<div class="card"><div class="card-title"><span class="ic ic-search"></span>批注详情（${(c.annotations || []).length}处）</div>${anns}</div>` : ''}
   `;
 }
 
@@ -615,12 +778,11 @@ function emailDetailHtml(d) {
   const c = d.correction || {};
   const score = c.score || {};
   const grade = score.grade || '—';
-  const gradeColor = { S: '#059669', A: '#2563EB', B: '#F59E0B', C: '#EF4444' }[grade] || '#6B7280';
-  const catIcon = EMAIL_CAT_ICONS[d.scene_category] || '📧';
+  const gradeColor = { S: '#4F6B57', A: '#3D3F86', B: '#9A6B1E', C: '#A8443B' }[grade] || '#6E6A60';
 
   const scoreGrid = `
     <div class="card">
-      <div class="card-title"><span class="icon">📊</span>批改评分</div>
+      <div class="card-title"><span class="ic ic-bars"></span>批改评分</div>
       <div class="email-score-grid">
         ${Object.entries(SCORE_DIM_LABELS).map(([k, v]) => `
           <div class="email-score-card">
@@ -639,7 +801,7 @@ function emailDetailHtml(d) {
   const mistakes = c.keigo_mistakes || [];
   const keigoHtml = mistakes.length ? `
     <div class="card card-keigo-alert">
-      <div class="card-title"><span class="icon">⚠️</span>敬語错误详解（${mistakes.length}处）</div>
+      <div class="card-title"><span class="ic ic-alert"></span>敬語错误详解（${mistakes.length}处）</div>
       ${mistakes.map(m => `
         <div class="keigo-mistake-item">
           <span class="keigo-mistake-type">${esc(m.type)}</span>
@@ -648,14 +810,14 @@ function emailDetailHtml(d) {
             <span class="keigo-arrow">→</span>
             <span class="keigo-fixed">${esc(m.corrected)}</span>
           </div>
-          <div class="keigo-rule">📌 ${esc(m.rule)}</div>
+          <div class="keigo-rule">${esc(m.rule)}</div>
         </div>`).join('')}
     </div>` : '';
 
   const annotations = c.annotations || [];
   const annHtml = annotations.length ? `
     <div class="card">
-      <div class="card-title"><span class="icon">🔍</span>批注详情（${annotations.length}处）</div>
+      <div class="card-title"><span class="ic ic-search"></span>批注详情（${annotations.length}处）</div>
       ${annotations.map(a => {
         const info = EMAIL_ERROR_LABELS[a.error_type] || { label: a.error_type, cls: '' };
         return `
@@ -674,13 +836,13 @@ function emailDetailHtml(d) {
   const highlights = c.highlights || [];
   const hlHtml = highlights.length ? `
     <div class="card card-highlight">
-      <div class="card-title"><span class="icon">✨</span>做得好的地方</div>
-      ${highlights.map(h => `<div class="highlight-item">✓ ${esc(h)}</div>`).join('')}
+      <div class="card-title"><span class="ic ic-star"></span>做得好的地方</div>
+      ${highlights.map(h => `<div class="highlight-item"><span class="ic ic-check" style="color:var(--matcha);width:15px;height:15px"></span> ${esc(h)}</div>`).join('')}
     </div>` : '';
 
   return `
     <div class="detail-meta">
-      <div class="detail-title">${catIcon} ${esc(d.scene_title || '')}</div>
+      <div class="detail-title">${esc(d.scene_title || '')}</div>
       <div class="detail-date">${fmtDate(d.created_at)}</div>
     </div>
     ${scoreGrid}
@@ -689,11 +851,11 @@ function emailDetailHtml(d) {
     ${hlHtml}
     ${d.email_draft ? `
       <div class="card">
-        <div class="card-title"><span class="icon">📝</span>你当时写的邮件</div>
+        <div class="card-title"><span class="ic ic-doc"></span>你当时写的邮件</div>
         <div class="correction-essay">${esc(d.email_draft)}</div>
       </div>` : ''}
     <div class="card">
-      <div class="card-title"><span class="icon">✅</span>修改稿</div>
+      <div class="card-title"><span class="ic ic-check"></span>修改稿</div>
       <div class="correction-essay">${esc(c.corrected_email || '')}</div>
     </div>
   `;
@@ -784,8 +946,6 @@ function renderHistory(data) {
 
 // -------- Email history (Track 2) --------
 
-const EMAIL_CAT_ICONS = { academic: '🎓', jobhunt: '💼', business: '🏢' };
-
 function renderEmailHistory(data) {
   const stats = data.email_stats || {};
   const sessions = data.email_sessions || [];
@@ -846,7 +1006,6 @@ function renderEmailHistory(data) {
   listEl.innerHTML = '';
   sessions.forEach(s => {
     const date = (s.created_at || '').replace('T', ' ').slice(0, 16);
-    const catIcon = EMAIL_CAT_ICONS[s.scene_category] || '📧';
     const dimBadges = Object.entries(SCORE_DIM_LABELS)
       .map(([dim, info]) => {
         const v = (s.dims || {})[dim] || 0;
@@ -855,7 +1014,7 @@ function renderEmailHistory(data) {
     listEl.innerHTML += `
       <div class="hist-item hist-item-click" onclick="openEmailDetail('${s.session_id}')">
         <div class="hist-item-head">
-          <span class="hist-exam">${catIcon} ${esc(s.scene_title || '')}</span>
+          <span class="hist-exam">${esc(s.scene_title || '')}</span>
           <span class="hist-level">${esc(s.grade || '—')} · ${s.total || 0}/40</span>
           <span class="hist-date">${date}</span>
         </div>
@@ -1230,7 +1389,6 @@ function renderEmailSceneGrid() {
   const grid = document.getElementById('email-scene-grid');
   const card = s => `
     <div class="email-scene-card" id="esc-${s.id}" onclick="selectEmailScene('${s.id}', this)">
-      <div class="esc-icon">${s.icon}</div>
       <div class="esc-title">${esc(s.title)}</div>
       <div class="esc-difficulty">${esc(s.difficulty)}</div>
       <div class="esc-desc">${esc(s.description)}</div>
@@ -1238,7 +1396,7 @@ function renderEmailSceneGrid() {
   grid.innerHTML = EMAIL_CATEGORIES.map(cat => {
     const scenes = EMAIL_SCENES.filter(s => (s.category || 'academic') === cat.id);
     if (!scenes.length) return '';
-    return `<div class="email-cat-header"><span class="icon">${cat.icon}</span>${cat.label}</div>`
+    return `<div class="email-cat-header">${cat.label}</div>`
       + scenes.map(card).join('');
   }).join('');
 }
@@ -1250,14 +1408,14 @@ function selectEmailScene(sceneId, el) {
   document.getElementById('btn-email-start').disabled = false;
   const desc = document.getElementById('email-scene-desc');
   desc.style.display = '';
-  desc.innerHTML = `<span class="icon">💡</span> 常用クッション言葉：<strong>${esc(emailState.scene.cushion)}</strong>`;
+  desc.innerHTML = `<span class="ic ic-idea"></span> 常用クッション言葉：<strong>${esc(emailState.scene.cushion)}</strong>`;
 }
 
 function startEmailWrite() {
   if (!emailState.scene) return;
   emailState.keyInfo = {};
   document.getElementById('email-scene-recap').textContent =
-    `${emailState.scene.icon} ${emailState.scene.title}——${emailState.scene.description}`;
+    `${emailState.scene.title}——${emailState.scene.description}`;
   document.getElementById('email-draft-input').value = '';
   document.getElementById('email-char-counter').textContent = '0 字';
   document.getElementById('btn-email-correct').disabled = false;
@@ -1401,21 +1559,21 @@ const EMAIL_ERROR_LABELS = {
 };
 
 function scoreColor(v) {
-  if (v >= 9) return '#059669';
-  if (v >= 7) return '#2563EB';
-  if (v >= 5) return '#F59E0B';
-  return '#EF4444';
+  if (v >= 9) return '#4F6B57';  // 沙青 sage
+  if (v >= 7) return '#3D3F86';  // 藍 indigo
+  if (v >= 5) return '#9A6B1E';  // 金 ochre
+  return '#A8443B';              // 朱 seal
 }
 
 function renderEmailCorrection(result) {
   const score = result.score || {};
   const grade = score.grade || '—';
-  const gradeColor = { S: '#059669', A: '#2563EB', B: '#F59E0B', C: '#EF4444' }[grade] || '#6B7280';
+  const gradeColor = { S: '#4F6B57', A: '#3D3F86', B: '#9A6B1E', C: '#A8443B' }[grade] || '#6E6A60';
 
   // Score cards
   document.getElementById('email-score-section').innerHTML = `
     <div class="card">
-      <div class="card-title"><span class="icon">📊</span>批改评分</div>
+      <div class="card-title"><span class="ic ic-bars"></span>批改评分</div>
       <div class="email-score-grid">
         ${Object.entries(SCORE_DIM_LABELS).map(([k, v]) => `
           <div class="email-score-card">
@@ -1435,7 +1593,7 @@ function renderEmailCorrection(result) {
   const mistakes = result.keigo_mistakes || [];
   document.getElementById('email-keigo-mistakes-section').innerHTML = mistakes.length ? `
     <div class="card card-keigo-alert">
-      <div class="card-title"><span class="icon">⚠️</span>敬語错误详解（${mistakes.length}处，重点记忆）</div>
+      <div class="card-title"><span class="ic ic-alert"></span>敬語错误详解（${mistakes.length}处，重点记忆）</div>
       ${mistakes.map(m => `
         <div class="keigo-mistake-item">
           <span class="keigo-mistake-type">${esc(m.type)}</span>
@@ -1444,7 +1602,7 @@ function renderEmailCorrection(result) {
             <span class="keigo-arrow">→</span>
             <span class="keigo-fixed">${esc(m.corrected)}</span>
           </div>
-          <div class="keigo-rule">📌 ${esc(m.rule)}</div>
+          <div class="keigo-rule">${esc(m.rule)}</div>
         </div>`).join('')}
     </div>` : '';
 
@@ -1452,7 +1610,7 @@ function renderEmailCorrection(result) {
   const annotations = result.annotations || [];
   document.getElementById('email-annotations-section').innerHTML = annotations.length ? `
     <div class="card">
-      <div class="card-title"><span class="icon">🔍</span>批注详情（${annotations.length}处）</div>
+      <div class="card-title"><span class="ic ic-search"></span>批注详情（${annotations.length}处）</div>
       ${annotations.map(a => {
         const info = EMAIL_ERROR_LABELS[a.error_type] || { label: a.error_type, cls: '' };
         return `
@@ -1472,8 +1630,8 @@ function renderEmailCorrection(result) {
   const highlights = result.highlights || [];
   document.getElementById('email-highlights-section').innerHTML = highlights.length ? `
     <div class="card card-highlight">
-      <div class="card-title"><span class="icon">✨</span>做得好的地方</div>
-      ${highlights.map(h => `<div class="highlight-item">✓ ${esc(h)}</div>`).join('')}
+      <div class="card-title"><span class="ic ic-star"></span>做得好的地方</div>
+      ${highlights.map(h => `<div class="highlight-item"><span class="ic ic-check" style="color:var(--matcha);width:15px;height:15px"></span> ${esc(h)}</div>`).join('')}
     </div>` : '';
 
   // Corrected email
@@ -1511,7 +1669,7 @@ function renderEmailModel(data) {
   const notes = data.notes_cn || [];
   const exprs = data.key_expressions || [];
   document.getElementById('email-model-content').innerHTML = `
-    ${notes.length ? `<div class="model-notes">${notes.map(n => `<div class="model-note-item">📌 ${esc(n)}</div>`).join('')}</div>` : ''}
+    ${notes.length ? `<div class="model-notes">${notes.map(n => `<div class="model-note-item">${esc(n)}</div>`).join('')}</div>` : ''}
     <div class="corrected-essay model-email-text">${esc(data.email || '').replace(/\n/g, '<br>')}</div>
     ${exprs.length ? `
       <div class="key-expressions" style="margin-top:16px">
@@ -1541,3 +1699,6 @@ function resetEmailMode() {
   });
   goEmailStep(0);
 }
+
+// Reveal handwriting upload if the backend has OCR enabled
+initOcrAvailability();

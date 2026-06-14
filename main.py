@@ -26,7 +26,8 @@ from database import (
     save_error_records,
     update_session,
 )
-from llm_client import chat, chat_json
+import llm_client
+from llm_client import chat, chat_json, vision_ocr, OCRUnavailable
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jwritecoach")
@@ -124,6 +125,7 @@ async def health():
         "db_backend": "postgres" if database.IS_PG else "sqlite",
         "db_url_set": db_url_set,
         "db_reachable": False,
+        "ocr_enabled": llm_client.OCR_ENABLED,
         "error": None,
     }
     try:
@@ -348,6 +350,38 @@ async def history_essay_detail(session_id: str, user_id: str):
         "draft_original": session["draft_original"] or "",
         "correction": safe_json(session["correction_json"]),
     }
+
+
+# ---- Handwriting OCR (writing stage) ----
+
+class OCRRequest(BaseModel):
+    images: list[str]  # data URLs (data:image/...;base64,...)
+
+
+@app.post("/api/ocr")
+async def ocr(req: OCRRequest):
+    """Transcribe handwritten essay photos into editable text.
+
+    The learner confirms/edits the result before it enters the normal correction
+    pipeline, so OCR mistakes are never graded as the student's own errors.
+    """
+    if not req.images:
+        raise HTTPException(status_code=400, detail="没有收到图片")
+    if len(req.images) > 5:
+        raise HTTPException(status_code=400, detail="一次最多上传 5 张图片")
+    for u in req.images:
+        if not u.startswith("data:image/"):
+            raise HTTPException(status_code=400, detail="不支持的图片格式")
+        if len(u) > 8_000_000:  # ~6MB after base64 overhead
+            raise HTTPException(status_code=400, detail="单张图片过大，请压缩到 6MB 以内再上传")
+    try:
+        text = vision_ocr(req.images)
+    except OCRUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="手写识别功能即将上线（待 DeepSeek 视觉接口开通后启用）。现在可以直接手动输入作文。",
+        )
+    return {"text": text}
 
 
 # ---- Track 2: Email Writing ----

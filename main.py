@@ -76,6 +76,7 @@ class PlanRequest(BaseModel):
 class DraftRequest(BaseModel):
     session_id: str
     draft: str
+    duration_sec: int | None = None  # actual writing time, set on final correction
 
 
 class SessionRequest(BaseModel):
@@ -258,7 +259,8 @@ async def correct_draft(req: DraftRequest):
     )
 
     result = safe_json(result_str)
-    update_session(req.session_id, correction_json=result_str, status="reflecting")
+    extra = {"duration_sec": req.duration_sec} if req.duration_sec is not None else {}
+    update_session(req.session_id, correction_json=result_str, status="reflecting", **extra)
     save_error_records(req.session_id, result.get("error_summary", {}))
     return result
 
@@ -347,6 +349,7 @@ async def history_essay_detail(session_id: str, user_id: str):
         "topic_text": session["topic_text"],
         "position": session["plan_position"],
         "created_at": session["created_at"],
+        "duration_sec": session["duration_sec"],
         "draft_original": session["draft_original"] or "",
         "correction": safe_json(session["correction_json"]),
     }
@@ -393,6 +396,7 @@ class EmailCorrectRequest(BaseModel):
     key_info: str
     email_draft: str
     user_id: str | None = None
+    duration_sec: int | None = None  # actual writing time
 
 
 class EmailModelRequest(BaseModel):
@@ -430,6 +434,7 @@ async def email_correct(req: EmailCorrectRequest):
         # in extra text (that's why safe_json exists), which would break
         # json.loads when reading history back.
         correction_json=json.dumps(result, ensure_ascii=False),
+        duration_sec=req.duration_sec,
     )
     return result
 
@@ -447,6 +452,7 @@ async def history_email_detail(session_id: str, user_id: str):
         "scene_category": session["scene_category"] or "academic",
         "key_info": session["key_info"] or "",
         "created_at": session["created_at"],
+        "duration_sec": session["duration_sec"],
         "email_draft": session["email_draft"] or "",
         "correction": safe_json(session["correction_json"]),
     }

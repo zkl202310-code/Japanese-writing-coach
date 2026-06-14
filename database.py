@@ -38,7 +38,10 @@ def q(sql: str) -> str:
 
 
 def _ensure_column(conn, table: str, column: str, ddl: str):
-    """Add a column if an older SQLite DB file predates it (idempotent migration)."""
+    """Add a column if an older DB predates it (idempotent migration, both backends)."""
+    if IS_PG:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {ddl}")
+        return
     cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
@@ -75,6 +78,7 @@ def init_db():
             reflection_json TEXT,
             model_essay_json TEXT,
             status TEXT DEFAULT 'plan',
+            duration_sec INTEGER,
             created_at TEXT DEFAULT ({now_text}),
             completed_at TEXT
         )""",
@@ -96,6 +100,7 @@ def init_db():
             key_info TEXT,
             email_draft TEXT,
             correction_json TEXT,
+            duration_sec INTEGER,
             created_at TEXT DEFAULT ({now_text})
         )""",
         "CREATE INDEX IF NOT EXISTS idx_sessions_user ON writing_sessions(user_id, created_at)",
@@ -105,9 +110,11 @@ def init_db():
     conn = get_db()
     for stmt in statements:
         conn.execute(stmt)
+    # Idempotent migrations for DBs created before these columns existed.
     if not IS_PG:
-        # Idempotent migration for SQLite DB files created before user_id existed.
         _ensure_column(conn, "writing_sessions", "user_id", "user_id TEXT")
+    _ensure_column(conn, "writing_sessions", "duration_sec", "duration_sec INTEGER")
+    _ensure_column(conn, "email_sessions", "duration_sec", "duration_sec INTEGER")
     conn.commit()
     conn.close()
 
@@ -166,7 +173,7 @@ def get_user_history(user_id: str, limit: int = 30) -> list[dict]:
     conn = get_db()
     rows = conn.execute(
         q("""
-        SELECT id, exam_type, topic_text, plan_position, correction_json, created_at, status
+        SELECT id, exam_type, topic_text, plan_position, correction_json, created_at, status, duration_sec
         FROM writing_sessions
         WHERE user_id = ? AND correction_json IS NOT NULL
         ORDER BY created_at DESC
@@ -190,6 +197,7 @@ def get_user_history(user_id: str, limit: int = 30) -> list[dict]:
             "position": row["plan_position"],
             "created_at": row["created_at"],
             "status": row["status"],
+            "duration_sec": row["duration_sec"],
             "score_level": (corr.get("score_estimate") or {}).get("level", "—"),
             "error_summary": {t: int(summary.get(t, 0) or 0) for t in ERROR_TYPES},
             "total_errors": sum(int(v or 0) for v in summary.values()),
@@ -243,14 +251,15 @@ def save_email_session(
     key_info: str,
     email_draft: str,
     correction_json: str,
+    duration_sec: int | None = None,
 ) -> str:
     session_id = str(uuid.uuid4())
     conn = get_db()
     conn.execute(
         q("""INSERT INTO email_sessions
-           (id, user_id, scene_id, scene_title, scene_category, key_info, email_draft, correction_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""),
-        (session_id, user_id, scene_id, scene_title, scene_category, key_info, email_draft, correction_json),
+           (id, user_id, scene_id, scene_title, scene_category, key_info, email_draft, correction_json, duration_sec)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""),
+        (session_id, user_id, scene_id, scene_title, scene_category, key_info, email_draft, correction_json, duration_sec),
     )
     conn.commit()
     conn.close()
@@ -272,7 +281,7 @@ def get_email_history(user_id: str, limit: int = 30) -> list[dict]:
     conn = get_db()
     rows = conn.execute(
         q("""
-        SELECT id, scene_id, scene_title, scene_category, email_draft, correction_json, created_at
+        SELECT id, scene_id, scene_title, scene_category, email_draft, correction_json, created_at, duration_sec
         FROM email_sessions
         WHERE user_id = ?
         ORDER BY created_at DESC
@@ -296,6 +305,7 @@ def get_email_history(user_id: str, limit: int = 30) -> list[dict]:
             "scene_title": row["scene_title"],
             "scene_category": row["scene_category"] or "academic",
             "created_at": row["created_at"],
+            "duration_sec": row["duration_sec"],
             "grade": score.get("grade") or "—",
             "total": _num(score.get("total")),
             "dims": {d: _num(score.get(d)) for d in EMAIL_SCORE_DIMS},

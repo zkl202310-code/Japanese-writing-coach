@@ -51,6 +51,165 @@ const ERROR_LABELS = {
   grammar:     { label: '语法',   cls: 'badge-grammar' },
 };
 
+// -------- Writing timer --------
+// Recommended writing time per mode (minutes), grounded in real exam durations:
+//   EJU 記述 = 30 (JASSO 官方)，高考作文 ≈ 25–30，専四作文 ≈ 25–30，専八作文 ≈ 40。
+//   JLPT 不考作文，N1/N2 与商务邮件为合理自定（思维训练节奏）。
+const WRITING_MINUTES = {
+  eju: 30, gaokao_jp: 30, tem4: 30, tem8: 40,
+  jlpt_n2: 30, jlpt_n1: 40,
+  email: 20,
+};
+const TIMER_NOTE = {
+  eju:       '参考 EJU 記述 官方 30 分钟',
+  gaokao_jp: '参考高考作文约 25–30 分钟',
+  tem4:      '参考专四作文约 25–30 分钟',
+  tem8:      '参考专八作文约 40 分钟',
+  jlpt_n2:   'N2 思维训练 · 建议 30 分钟',
+  jlpt_n1:   'N1 思维训练 · 建议 40 分钟',
+  email:     '建议 20 分钟内写完',
+};
+
+// One shared timer engine; only one writing screen is visible at a time.
+const timer = { ctx: null, total: 0, remaining: 0, running: false, endAt: 0, iv: null, notified: false };
+
+function timerEls(ctx) {
+  return {
+    root:   document.getElementById(`${ctx}-timer`),
+    time:   document.getElementById(`${ctx}-timer-time`),
+    fill:   document.getElementById(`${ctx}-timer-fill`),
+    note:   document.getElementById(`${ctx}-timer-note`),
+    toggle: document.getElementById(`${ctx}-timer-toggle`),
+  };
+}
+
+function fmtClock(sec) {
+  const neg = sec < 0;
+  const s = Math.abs(sec);
+  const m = Math.floor(s / 60);
+  return (neg ? '+' : '') + `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function clearTimerIv() { if (timer.iv) { clearInterval(timer.iv); timer.iv = null; } }
+
+function renderTimer() {
+  if (!timer.ctx) return;
+  const els = timerEls(timer.ctx);
+  if (!els.root) return;
+  const rem = timer.remaining;
+  if (els.time) els.time.textContent = fmtClock(rem);
+  const pct = timer.total ? Math.max(0, Math.min(100, ((timer.total - rem) / timer.total) * 100)) : 0;
+  if (els.fill) els.fill.style.width = pct + '%';
+  els.root.classList.toggle('is-warn', rem >= 0 && rem <= 60);
+  els.root.classList.toggle('is-over', rem < 0);
+  if (els.toggle) els.toggle.textContent = timer.running ? '暂停' : '继续';
+  // Soft one-time cue at time-up — practice never hard-stops.
+  if (rem <= 0 && timer.running && !timer.notified) {
+    timer.notified = true;
+    showToast('建议时间到，可以继续完成（练习不强制结束）');
+  }
+}
+
+function tickTimer() {
+  if (!timer.ctx || !timer.running) return;
+  timer.remaining = Math.round((timer.endAt - Date.now()) / 1000);
+  renderTimer();
+}
+
+function startWritingTimer(ctx, mode) {
+  clearTimerIv();
+  const mins = WRITING_MINUTES[mode] || 30;
+  timer.ctx = ctx;
+  timer.total = mins * 60;
+  timer.remaining = timer.total;
+  timer.running = true;
+  timer.endAt = Date.now() + timer.remaining * 1000;
+  timer.notified = false;
+  const els = timerEls(ctx);
+  if (els.note) els.note.textContent = TIMER_NOTE[mode] || `建议 ${mins} 分钟完成`;
+  renderTimer();
+  timer.iv = setInterval(tickTimer, 250);
+}
+
+function resumeTimer(ctx) {
+  if (timer.ctx !== ctx || !timer.total) return;
+  if (!timer.running) {
+    timer.running = true;
+    timer.endAt = Date.now() + timer.remaining * 1000;
+  }
+  clearTimerIv();
+  timer.iv = setInterval(tickTimer, 250);
+  renderTimer();
+}
+
+function freezeTimer() {
+  if (!timer.ctx) return;
+  if (timer.running) timer.remaining = Math.round((timer.endAt - Date.now()) / 1000);
+  timer.running = false;
+  clearTimerIv();
+  renderTimer();
+}
+
+function toggleTimer(ctx) {
+  if (timer.ctx !== ctx) return;
+  if (timer.running) freezeTimer(); else resumeTimer(ctx);
+}
+
+function restartTimer(ctx) {
+  if (timer.ctx !== ctx) return;
+  startWritingTimer(ctx, ctx === 'email' ? 'email' : state.examType);
+}
+
+function stopWritingTimer() {
+  clearTimerIv();
+  timer.ctx = null; timer.total = 0; timer.remaining = 0; timer.running = false; timer.notified = false;
+}
+
+// Active writing time spent so far (seconds), excluding paused gaps. null if no timer.
+function currentElapsedSeconds() {
+  if (!timer.ctx || !timer.total) return null;
+  const rem = timer.running ? Math.round((timer.endAt - Date.now()) / 1000) : timer.remaining;
+  return Math.max(0, Math.min(timer.total - rem, 60 * 60 * 6));  // cap 6h
+}
+
+// Essay timer follows the essay step: run on step 2, freeze elsewhere.
+function syncEssayTimer(n) {
+  if (n === 2) {
+    if (!timer.total || timer.ctx !== 'essay') startWritingTimer('essay', state.examType);
+    else resumeTimer('essay');
+  } else {
+    freezeTimer();
+  }
+}
+
+// Email timer follows the email step: run on step 1, freeze elsewhere.
+function syncEmailTimer(n) {
+  if (n === 1) {
+    if (!timer.total || timer.ctx !== 'email') startWritingTimer('email', 'email');
+    else resumeTimer('email');
+  } else {
+    freezeTimer();
+  }
+}
+
+// -------- Home (clickable logo) --------
+function goHome() {
+  stopWritingTimer();
+  closeHistory();
+  closeDetail();
+  // If we're inside the email track, restore the essay chrome first.
+  const emailStepper = document.getElementById('email-stepper');
+  if (emailStepper && emailStepper.style.display !== 'none') {
+    ['sec-email-0', 'sec-email-1', 'sec-email-2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+    emailStepper.style.display = 'none';
+    document.getElementById('stepper').style.display = 'flex';
+  }
+  goToStep(0);
+}
+
 // -------- Step navigation --------
 
 function goToStep(n) {
@@ -66,6 +225,8 @@ function goToStep(n) {
     else if (i === n){ dot.classList.add('active'); lbl.classList.add('active'); }
   }
   state.currentStep = n;
+  syncEssayTimer(n);
+  if (n === 2) maybeRestoreDraft('essay');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -244,6 +405,7 @@ function goToStep2() {
     `<span>理由：<strong>${reasons.join(' / ')}</strong></span>` +
     `<span>构成：<strong>${structure}</strong></span>`;
 
+  stopWritingTimer();  // new attempt → fresh clock
   goToStep(2);
 }
 
@@ -252,6 +414,7 @@ function goToStep2() {
 function updateCharCount() {
   const text = document.getElementById('draft-input').value;
   const count = text.length;
+  saveDraft('essay', text);
   const target = CHAR_TARGETS[state.examType] || { min: 300, max: 500 };
   const el = document.getElementById('char-counter');
   el.textContent = `${count} 字 （目标 ${target.min}〜${target.max} 字）`;
@@ -364,6 +527,7 @@ async function requestCorrection() {
   const draft = document.getElementById('draft-input').value.trim();
   if (!draft) return;
   state.draft = draft;
+  const elapsed = currentElapsedSeconds();
 
   hide('socratic-box');
   show('correct-loading');
@@ -372,9 +536,11 @@ async function requestCorrection() {
     const data = await api('/api/draft/correct', {
       session_id: state.sessionId,
       draft,
+      duration_sec: elapsed,
     });
     state.correction = data;
     renderCorrection(data);
+    clearDraft('essay');
     goToStep(3);
     // Model essay is the slowest call (~15-20s). Start it now, in the background,
     // so it is usually ready by the time the user reaches the reflection step.
@@ -620,6 +786,7 @@ async function loadModelEssay() {
 // -------- Reset --------
 
 function resetAll() {
+  stopWritingTimer();
   Object.assign(state, {
     currentStep: 0, examType: null, topic: null, sessionId: null,
     planFeedback: null, canProceed: false, draft: null, correction: null,
@@ -633,6 +800,7 @@ function resetAll() {
   ['reason1','reason2','reason3'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('draft-input').value = '';
   document.getElementById('char-counter').textContent = '0 字';
+  clearDraft('essay');
 
   hide('plan-feedback-box');
   hide('socratic-box');
@@ -755,7 +923,7 @@ function essayDetailHtml(d) {
   return `
     <div class="detail-meta">
       <div class="detail-title">${esc(examName)}</div>
-      <div class="detail-date">${fmtDate(d.created_at)}</div>
+      <div class="detail-date">${fmtDate(d.created_at)}${d.duration_sec ? ` · 用时 ${fmtDur(d.duration_sec)}` : ''}</div>
     </div>
     <div class="detail-topic"><strong>题目：</strong>${esc(d.topic_text || '')}</div>
     ${d.position ? `<div class="detail-topic"><strong>立场：</strong>${esc(d.position)}</div>` : ''}
@@ -843,7 +1011,7 @@ function emailDetailHtml(d) {
   return `
     <div class="detail-meta">
       <div class="detail-title">${esc(d.scene_title || '')}</div>
-      <div class="detail-date">${fmtDate(d.created_at)}</div>
+      <div class="detail-date">${fmtDate(d.created_at)}${d.duration_sec ? ` · 用时 ${fmtDur(d.duration_sec)}` : ''}</div>
     </div>
     ${scoreGrid}
     ${keigoHtml}
@@ -935,6 +1103,7 @@ function renderHistory(data) {
         <div class="hist-item-head">
           <span class="hist-exam">${examName}</span>
           <span class="hist-level">${s.score_level || '—'}</span>
+          ${s.duration_sec ? `<span class="hist-time"><span class="ic ic-clock"></span>${fmtDur(s.duration_sec)}</span>` : ''}
           <span class="hist-date">${date}</span>
         </div>
         <div class="hist-topic">${esc((s.topic_text || '').slice(0, 60))}${(s.topic_text || '').length > 60 ? '…' : ''}</div>
@@ -1016,6 +1185,7 @@ function renderEmailHistory(data) {
         <div class="hist-item-head">
           <span class="hist-exam">${esc(s.scene_title || '')}</span>
           <span class="hist-level">${esc(s.grade || '—')} · ${s.total || 0}/40</span>
+          ${s.duration_sec ? `<span class="hist-time"><span class="ic ic-clock"></span>${fmtDur(s.duration_sec)}</span>` : ''}
           <span class="hist-date">${date}</span>
         </div>
         <div class="hist-topic">${esc(s.draft_preview || '')}${(s.draft_preview || '').length >= 60 ? '…' : ''}</div>
@@ -1055,6 +1225,65 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// Non-blocking toast notification (auto-dismiss).
+let _toastTimer = null;
+function showToast(msg, ms = 3400) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  void el.offsetWidth;  // reflow so the transition runs
+  el.classList.add('show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => { el.style.display = 'none'; }, 280);
+  }, ms);
+}
+
+// Seconds -> "M:SS" (used for writing-time badges in history).
+function fmtDur(sec) {
+  sec = Math.round(sec || 0);
+  const m = Math.floor(sec / 60);
+  return `${m}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+// -------- Draft auto-save (survives refresh / accidental navigation) --------
+function draftKey(ctx) { return ctx === 'essay' ? 'jwc_draft_essay' : 'jwc_draft_email'; }
+
+function saveDraft(ctx, val) {
+  try { localStorage.setItem(draftKey(ctx), val || ''); } catch (_) { /* storage full/blocked */ }
+  // Once the learner starts editing, the "restored" banner is no longer needed.
+  const hint = document.getElementById(`${ctx}-restored`);
+  if (hint && hint.style.display !== 'none') hint.style.display = 'none';
+}
+
+function clearDraft(ctx) {
+  try { localStorage.removeItem(draftKey(ctx)); } catch (_) {}
+  const hint = document.getElementById(`${ctx}-restored`);
+  if (hint) hint.style.display = 'none';
+}
+
+function maybeRestoreDraft(ctx) {
+  const ta = document.getElementById(ctx === 'essay' ? 'draft-input' : 'email-draft-input');
+  if (!ta || ta.value.trim()) return;  // never clobber existing text
+  let saved = '';
+  try { saved = localStorage.getItem(draftKey(ctx)) || ''; } catch (_) {}
+  if (!saved.trim()) return;
+  ta.value = saved;
+  if (ctx === 'essay') updateCharCount(); else updateEmailCounter(ta);
+  const hint = document.getElementById(`${ctx}-restored`);
+  if (hint) hint.style.display = '';  // show last (updateCharCount may have hidden it)
+}
+
+// Discard a restored draft and start clean (from the "清空重写" link).
+function discardDraft(ctx) {
+  const ta = document.getElementById(ctx === 'essay' ? 'draft-input' : 'email-draft-input');
+  if (ta) ta.value = '';
+  clearDraft(ctx);
+  if (ctx === 'essay') updateCharCount(); else if (ta) updateEmailCounter(ta);
 }
 
 
@@ -1358,10 +1587,13 @@ function goEmailStep(n) {
   const target = document.getElementById(`sec-email-${n}`);
   if (target) target.classList.add('active');
   updateEmailStepper(n);
+  syncEmailTimer(n);
+  if (n === 1) maybeRestoreDraft('email');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function enterEmailMode() {
+  stopWritingTimer();
   document.getElementById('sec-0').classList.remove('active');
   document.getElementById('stepper').style.display = 'none';
   document.getElementById('email-stepper').style.display = 'flex';
@@ -1370,6 +1602,7 @@ function enterEmailMode() {
 }
 
 function exitEmailMode() {
+  stopWritingTimer();
   ['sec-email-0', 'sec-email-1', 'sec-email-2'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.remove('active');
@@ -1426,6 +1659,7 @@ function startEmailWrite() {
   renderEmailKeyFields();
   renderKeigoTips();
   renderEmailFormatPanel();
+  stopWritingTimer();  // new email → fresh clock
   goEmailStep(1);
 }
 
@@ -1499,6 +1733,7 @@ function toggleKeigoTips() {
 
 function updateEmailCounter(el) {
   document.getElementById('email-char-counter').textContent = `${el.value.length} 字`;
+  saveDraft('email', el.value);
 }
 
 function buildKeyInfoString() {
@@ -1513,6 +1748,7 @@ async function submitEmailCorrect() {
   const draft = document.getElementById('email-draft-input').value.trim();
   if (draft.length < 30) { alert('邮件内容太短，请至少写30字'); return; }
   emailState.emailDraft = draft;
+  const elapsed = currentElapsedSeconds();
 
   show('email-correct-loading');
   document.getElementById('btn-email-correct').disabled = true;
@@ -1525,6 +1761,7 @@ async function submitEmailCorrect() {
       key_info:       buildKeyInfoString(),
       email_draft:    draft,
       user_id:        USER_ID,
+      duration_sec:   elapsed,
     });
     emailState.correction = result;
     emailState.modelEmailPromise = api('/api/email/model', {
@@ -1535,6 +1772,7 @@ async function submitEmailCorrect() {
     });
     emailState.modelEmailPromise.catch(() => {});
     renderEmailCorrection(result);
+    clearDraft('email');
     goEmailStep(2);
   } catch (e) {
     alert('批改失败：' + e.message);
@@ -1683,11 +1921,13 @@ function renderEmailModel(data) {
 }
 
 function resetEmailMode() {
+  stopWritingTimer();
   Object.assign(emailState, {
     scene: null, keyInfo: {}, emailDraft: null, correction: null, modelEmailPromise: null,
   });
   document.getElementById('email-draft-input').value = '';
   document.getElementById('email-char-counter').textContent = '0 字';
+  clearDraft('email');
   document.getElementById('btn-email-correct').disabled = false;
   document.getElementById('btn-email-start').disabled = true;
   document.getElementById('email-scene-desc').style.display = 'none';

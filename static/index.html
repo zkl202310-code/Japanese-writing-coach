@@ -140,8 +140,9 @@
       <span class="email-entry-arrow">→</span>
     </div>
 
-    <div class="btn-row" style="justify-content:center;margin-top:28px">
-      <button class="btn btn-primary" id="btn-start" onclick="goToStep1()" disabled style="padding:13px 36px;font-size:15px">
+    <div class="start-bar" id="start-bar">
+      <div class="start-bar-info" id="start-bar-info">请先在上方选择写作类型</div>
+      <button class="btn btn-primary" id="btn-start" onclick="goToStep1()" disabled style="padding:13px 32px;font-size:15px">
         开始练习 →
       </button>
     </div>
@@ -156,8 +157,9 @@
     <div class="card">
       <div class="card-title"><span class="ic ic-doc"></span>今日题目</div>
       <div class="topic-box jp-text" lang="ja" id="topic-display">加载中…</div>
+      <div class="topic-meta" id="topic-meta"></div>
       <div class="topic-hint" id="topic-hint"></div>
-      <button class="btn-link" style="margin-top:8px" onclick="loadTopic()">換一題 ↺</button>
+      <button class="btn-link" style="margin-top:8px" onclick="loadTopic()">换一题 ↺</button>
     </div>
 
     <div class="card">
@@ -219,6 +221,7 @@
         <div class="card">
           <div class="card-title"><span class="ic ic-doc"></span>题目</div>
           <div class="topic-box jp-text" lang="ja" id="topic-display-2"></div>
+          <div class="topic-meta" id="topic-meta-2"></div>
         </div>
         <div class="card">
           <div class="card-title"><span class="ic ic-idea"></span>你的提纲</div>

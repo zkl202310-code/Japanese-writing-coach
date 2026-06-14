@@ -424,9 +424,29 @@ body {
 .mode-card.selected {
   border-color: var(--indigo);
   background: var(--indigo-lt);
-  box-shadow: var(--shadow);
+  /* inset ring instead of a thicker border → no layout shift */
+  box-shadow: var(--shadow), inset 0 0 0 1.5px var(--indigo);
 }
 .mode-card.selected::before { opacity: 1; }
+
+/* clear "已选择" check badge */
+.mode-card.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--indigo);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
 
 .mode-card .mode-name {
   font-size: 18px;
@@ -481,6 +501,63 @@ body {
   color: var(--gray-400);
   margin-top: 6px;
 }
+
+/* word-count requirement shown on the topic prompt */
+.topic-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+.topic-meta:empty { display: none; }
+.topic-req {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--indigo);
+  background: var(--indigo-lt);
+  border: 1px solid var(--indigo-bd);
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+.topic-req .ic { width: 14px; height: 14px; color: var(--indigo); vertical-align: -2px; }
+.topic-req strong { font-weight: 700; }
+
+/* ========== Start bar (homepage) — selection feedback + nearby CTA ==========
+   Sits in normal flow until a mode is picked; only then does it lift to a
+   viewport-sticky pill so the CTA stays close — avoids an empty bar floating
+   over the lower选择 groups before anything is selected. */
+.start-bar {
+  position: static;
+  z-index: 30;
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 12px 11px 20px;
+  background: rgba(253, 252, 248, .92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  transition: box-shadow .2s, border-color .2s;
+}
+.start-bar.is-ready {
+  position: sticky;
+  bottom: 16px;
+  border-color: var(--indigo-bd);
+  box-shadow: var(--shadow-hover);
+}
+.start-bar-info {
+  font-size: 14px;
+  color: var(--gray-500);
+}
+.start-bar.is-ready .start-bar-info { color: var(--ink-soft); }
+.start-bar-info strong { font-weight: 700; color: var(--indigo); }
 
 .btn-link {
   background: none;
@@ -1216,6 +1293,9 @@ body {
   .main { padding: 20px 14px 60px; }
   .mode-card { max-width: none; }
   .btn-row { flex-direction: column; }
+  .start-bar { border-radius: 16px; padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+  .start-bar-info { flex: 1 1 100%; text-align: center; }
+  .start-bar .btn { width: 100%; }
   /* compact stepper: only the current step keeps its label, so all 5 dots fit */
   .stepper { padding: 8px 14px; }
   .step-label { display: none; }

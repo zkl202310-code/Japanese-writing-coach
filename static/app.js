@@ -70,6 +70,23 @@ const TIMER_NOTE = {
   email:     '建议 20 分钟内写完',
 };
 
+// Display name + per-level word-count requirement (mirrors the homepage cards).
+// Shown on the topic prompt so students always know how much to write.
+const MODE_INFO = {
+  eju:       { name: 'EJU 小论文',   chars: '400〜500字' },
+  gaokao_jp: { name: '高考日语',     chars: '300〜350字' },
+  tem4:      { name: '日语专业四级', chars: '350〜400字' },
+  tem8:      { name: '日语专业八级', chars: '450〜500字' },
+  jlpt_n2:   { name: 'N2 水平',      chars: '300〜400字' },
+  jlpt_n1:   { name: 'N1 水平',      chars: '400〜600字' },
+};
+
+function topicReqHTML(mode) {
+  const mi = MODE_INFO[mode];
+  if (!mi) return '';
+  return `<span class="topic-req"><span class="ic ic-pen"></span>字数要求 <strong>${mi.chars}</strong></span>`;
+}
+
 // One shared timer engine; only one writing screen is visible at a time.
 const timer = { ctx: null, mode: null, total: 0, remaining: 0, running: false, armed: false, endAt: 0, iv: null, notified: false };
 
@@ -289,6 +306,22 @@ function selectMode(examType, el) {
   document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
   document.getElementById('btn-start').disabled = false;
+
+  // Strengthen the selection feedback + bring the start action close by.
+  const bar = document.getElementById('start-bar');
+  const info = document.getElementById('start-bar-info');
+  const mi = MODE_INFO[examType];
+  if (bar) bar.classList.add('is-ready');
+  if (info && mi) info.innerHTML = `已选择 <strong>${mi.name}</strong> · 字数要求 ${mi.chars}`;
+}
+
+function clearModeSelection() {
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('btn-start').disabled = true;
+  const bar = document.getElementById('start-bar');
+  const info = document.getElementById('start-bar-info');
+  if (bar) bar.classList.remove('is-ready');
+  if (info) info.textContent = '请先在上方选择写作类型';
 }
 
 async function goToStep1() {
@@ -369,12 +402,14 @@ function setPosition(val) {
 async function loadTopic() {
   document.getElementById('topic-display').textContent = '加载中…';
   document.getElementById('topic-hint').textContent = '';
+  document.getElementById('topic-meta').innerHTML = '';
   document.getElementById('position-input').value = '';
   document.getElementById('quick-pos-btns').innerHTML = '';
   try {
     const data = await api(`/api/topic?exam_type=${state.examType}`);
     state.topic = data;
     document.getElementById('topic-display').textContent = data.text;
+    document.getElementById('topic-meta').innerHTML = topicReqHTML(state.examType);
     document.getElementById('topic-hint').textContent = data.hint ? `参考方向：${data.hint}` : '';
     renderPositionUI(data.text);
   } catch (e) {
@@ -441,6 +476,7 @@ function goToStep2() {
   ].filter(Boolean);
 
   document.getElementById('topic-display-2').textContent = state.topic.text;
+  document.getElementById('topic-meta-2').innerHTML = topicReqHTML(state.examType);
   document.getElementById('plan-summary-display').innerHTML =
     `<span>立场：<strong>${position}</strong></span>` +
     `<span>理由：<strong>${reasons.join(' / ')}</strong></span>` +
@@ -887,8 +923,7 @@ function resetAll() {
   hide('system-reflect');
   show('self-reflect-card');
 
-  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('btn-start').disabled = true;
+  clearModeSelection();
 
   goToStep(0);
 }

@@ -25,7 +25,7 @@ const CHAR_TARGETS = {
 const EXAM_NAMES = {
   jlpt_n2:   'N2 水平',
   jlpt_n1:   'N1 水平',
-  eju:       'EJU 小論文',
+  eju:       'EJU 小论文',
   gaokao_jp: '高考日语',
   tem4:      '日语专业四级',
   tem8:      '日语专业八级',
@@ -71,7 +71,7 @@ const TIMER_NOTE = {
 };
 
 // One shared timer engine; only one writing screen is visible at a time.
-const timer = { ctx: null, total: 0, remaining: 0, running: false, endAt: 0, iv: null, notified: false };
+const timer = { ctx: null, mode: null, total: 0, remaining: 0, running: false, armed: false, endAt: 0, iv: null, notified: false };
 
 function timerEls(ctx) {
   return {
@@ -84,10 +84,9 @@ function timerEls(ctx) {
 }
 
 function fmtClock(sec) {
-  const neg = sec < 0;
-  const s = Math.abs(sec);
+  const s = Math.max(0, Math.abs(Math.round(sec)));
   const m = Math.floor(s / 60);
-  return (neg ? '+' : '') + `${m}:${String(s % 60).padStart(2, '0')}`;
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
 function clearTimerIv() { if (timer.iv) { clearInterval(timer.iv); timer.iv = null; } }
@@ -97,12 +96,12 @@ function renderTimer() {
   const els = timerEls(timer.ctx);
   if (!els.root) return;
   const rem = timer.remaining;
-  if (els.time) els.time.textContent = fmtClock(rem);
+  if (els.time) els.time.textContent = rem < 0 ? `已超时 ${fmtClock(rem)}` : fmtClock(rem);
   const pct = timer.total ? Math.max(0, Math.min(100, ((timer.total - rem) / timer.total) * 100)) : 0;
   if (els.fill) els.fill.style.width = pct + '%';
   els.root.classList.toggle('is-warn', rem >= 0 && rem <= 60);
   els.root.classList.toggle('is-over', rem < 0);
-  if (els.toggle) els.toggle.textContent = timer.running ? '暂停' : '继续';
+  if (els.toggle) els.toggle.textContent = timer.running ? '暂停' : (timer.armed ? '开始' : '继续');
   // Soft one-time cue at time-up — practice never hard-stops.
   if (rem <= 0 && timer.running && !timer.notified) {
     timer.notified = true;
@@ -120,9 +119,11 @@ function startWritingTimer(ctx, mode) {
   clearTimerIv();
   const mins = WRITING_MINUTES[mode] || 30;
   timer.ctx = ctx;
+  timer.mode = mode;
   timer.total = mins * 60;
   timer.remaining = timer.total;
   timer.running = true;
+  timer.armed = false;
   timer.endAt = Date.now() + timer.remaining * 1000;
   timer.notified = false;
   const els = timerEls(ctx);
@@ -131,11 +132,36 @@ function startWritingTimer(ctx, mode) {
   timer.iv = setInterval(tickTimer, 250);
 }
 
+// Arm (ready but not counting) — counting begins on first focus of the editor,
+// so reading the题目/参考/敬语难点 is not charged as writing time.
+function armTimer(ctx, mode) {
+  clearTimerIv();
+  const mins = WRITING_MINUTES[mode] || 30;
+  timer.ctx = ctx;
+  timer.mode = mode;
+  timer.total = mins * 60;
+  timer.remaining = timer.total;
+  timer.running = false;
+  timer.armed = true;
+  timer.notified = false;
+  const els = timerEls(ctx);
+  if (els.note) els.note.textContent = (TIMER_NOTE[mode] || `建议 ${mins} 分钟`) + ' · 开始书写即计时';
+  renderTimer();
+}
+
+// First focus / first keystroke in the editor starts an armed timer.
+function beginTimerIfArmed(ctx) {
+  if (timer.ctx === ctx && timer.armed) resumeTimer(ctx);
+}
+
 function resumeTimer(ctx) {
   if (timer.ctx !== ctx || !timer.total) return;
   if (!timer.running) {
     timer.running = true;
+    timer.armed = false;
     timer.endAt = Date.now() + timer.remaining * 1000;
+    const els = timerEls(ctx);
+    if (els.note && timer.mode) els.note.textContent = TIMER_NOTE[timer.mode] || els.note.textContent;
   }
   clearTimerIv();
   timer.iv = setInterval(tickTimer, 250);
@@ -160,9 +186,15 @@ function restartTimer(ctx) {
   startWritingTimer(ctx, ctx === 'email' ? 'email' : state.examType);
 }
 
+// reset clears elapsed time → confirm first to avoid accidental loss
+function confirmRestartTimer(ctx) {
+  if (confirm('确定重置计时吗？已用时间会清零。')) restartTimer(ctx);
+}
+
 function stopWritingTimer() {
   clearTimerIv();
-  timer.ctx = null; timer.total = 0; timer.remaining = 0; timer.running = false; timer.notified = false;
+  timer.ctx = null; timer.mode = null; timer.total = 0; timer.remaining = 0;
+  timer.running = false; timer.armed = false; timer.notified = false;
 }
 
 // Active writing time spent so far (seconds), excluding paused gaps. null if no timer.
@@ -175,8 +207,8 @@ function currentElapsedSeconds() {
 // Essay timer follows the essay step: run on step 2, freeze elsewhere.
 function syncEssayTimer(n) {
   if (n === 2) {
-    if (!timer.total || timer.ctx !== 'essay') startWritingTimer('essay', state.examType);
-    else resumeTimer('essay');
+    if (!timer.total || timer.ctx !== 'essay') armTimer('essay', state.examType);
+    else if (!timer.armed) resumeTimer('essay');  // resume a started timer; leave an un-started one idle
   } else {
     freezeTimer();
   }
@@ -185,8 +217,8 @@ function syncEssayTimer(n) {
 // Email timer follows the email step: run on step 1, freeze elsewhere.
 function syncEmailTimer(n) {
   if (n === 1) {
-    if (!timer.total || timer.ctx !== 'email') startWritingTimer('email', 'email');
-    else resumeTimer('email');
+    if (!timer.total || timer.ctx !== 'email') armTimer('email', 'email');
+    else if (!timer.armed) resumeTimer('email');
   } else {
     freezeTimer();
   }
@@ -239,6 +271,15 @@ function stepClick(n) {
   if (dot && (dot.classList.contains('done') || dot.classList.contains('active'))) {
     goToStep(n);
   }
+}
+
+// Collapse the题目/提纲 sidebar on the writing step for a full-width editor (专注模式)
+function toggleAside() {
+  const stage = document.querySelector('#sec-2 .stage');
+  if (!stage) return;
+  const collapsed = stage.classList.toggle('is-collapsed');
+  const btn = document.getElementById('aside-toggle');
+  if (btn) btn.textContent = collapsed ? '展开题目栏 ⟩' : '收起题目栏 ⟨';
 }
 
 // -------- Step 0: Mode selection --------
@@ -569,6 +610,21 @@ function renderCorrection(data) {
   const score = data.score_estimate || {};
   corrAnns = (data.annotations || []);
 
+  // Order annotations by where they appear in the corrected essay, so inline
+  // marks and the suggestion list share one reading-order numbering (1,2,3…).
+  const _essay = data.corrected_essay || '';
+  corrAnns.forEach(a => { const f = a.corrected || ''; a._pos = f ? _essay.indexOf(f) : -1; });
+  corrAnns = corrAnns
+    .map((a, idx) => ({ a, idx }))
+    .sort((x, y) => {
+      const px = x.a._pos, py = y.a._pos;
+      if (px < 0 && py < 0) return x.idx - y.idx;
+      if (px < 0) return 1;
+      if (py < 0) return -1;
+      return px - py || x.idx - y.idx;
+    })
+    .map(o => o.a);
+
   // --- Score overview (level + comment) ---
   document.getElementById('score-badge').innerHTML = `
     <div class="diag-score">
@@ -597,17 +653,26 @@ function renderCorrection(data) {
   });
   document.getElementById('corrected-essay').innerHTML = html;
 
-  // --- Category filter chips ---
-  const summary = data.error_summary || {};
-  const total = Object.values(summary).reduce((s, v) => s + (parseInt(v) || 0), 0);
+  // --- Category filter chips (all counts derived from the single annotations source) ---
+  const summary = {};
+  corrAnns.forEach(a => { summary[a.error_type] = (summary[a.error_type] || 0) + 1; });
+  const total = corrAnns.length;
+  const markedCount = corrAnns.filter(a => a._marked).length;
   let chips = `<button class="diag-chip diag-chip--all is-active" data-type="__all" onclick="setCorrFilter('__all',this)">全部 ${total}</button>`;
   Object.entries(summary).forEach(([type, count]) => {
-    if (count > 0) {
-      const info = ERROR_LABELS[type] || { label: type, cls: '' };
-      chips += `<button class="diag-chip ${info.cls}" data-type="${type}" onclick="setCorrFilter('${type}',this)">${info.label} ${count}</button>`;
-    }
+    const info = ERROR_LABELS[type] || { label: type, cls: '' };
+    chips += `<button class="diag-chip ${info.cls}" data-type="${type}" onclick="setCorrFilter('${type}',this)">${info.label} ${count}</button>`;
   });
   document.getElementById('error-stats').innerHTML = chips;
+
+  // Consistency indicator: marks / suggestions / categories all come from one source.
+  const consistEl = document.getElementById('corr-consistency');
+  if (consistEl) {
+    consistEl.innerHTML = `正文标记 ${markedCount} · 批注 ${total} · 分类 ${total}`
+      + (markedCount === total
+          ? ' <span class="corr-ok">✓ 一致</span>'
+          : ` <span class="corr-warn">（${total - markedCount} 处未能在正文定位）</span>`);
+  }
 
   // --- Per-suggestion cards (expand / accept / ignore) ---
   const annEl = document.getElementById('annotations-list');
@@ -634,6 +699,7 @@ function renderCorrection(data) {
           </div>
           <div class="annotation-explain">${esc(a.explanation_cn)}</div>
           <div class="sug-actions">
+            ${a._marked ? `<button class="sug-act" onclick="locateMark(${i})">定位原文</button>` : ''}
             <button class="sug-act sug-accept" onclick="markSug(${i},'accepted')">采纳</button>
             <button class="sug-act sug-ignore" onclick="markSug(${i},'ignored')">忽略</button>
           </div>
@@ -680,6 +746,15 @@ function hlSug(i, on) {
   const s = document.getElementById(`sug-${i}`);
   if (s) s.classList.toggle('is-hot', on);
 }
+// click "定位原文" on a suggestion -> scroll its inline mark into view + flash
+function locateMark(i) {
+  const m = document.getElementById(`emark-${i}`);
+  if (!m) return;
+  m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  m.classList.add('is-hot');
+  setTimeout(() => m.classList.remove('is-hot'), 1200);
+}
+
 // click an inline mark -> open + scroll its suggestion into view
 function jumpSug(i) {
   const s = document.getElementById(`sug-${i}`);
@@ -969,7 +1044,7 @@ function emailDetailHtml(d) {
   const mistakes = c.keigo_mistakes || [];
   const keigoHtml = mistakes.length ? `
     <div class="card card-keigo-alert">
-      <div class="card-title"><span class="ic ic-alert"></span>敬語错误详解（${mistakes.length}处）</div>
+      <div class="card-title"><span class="ic ic-alert"></span>敬语错误详解（${mistakes.length}处）</div>
       ${mistakes.map(m => `
         <div class="keigo-mistake-item">
           <span class="keigo-mistake-type">${esc(m.type)}</span>
@@ -1229,18 +1304,22 @@ function esc(str) {
 
 // Non-blocking toast notification (auto-dismiss).
 let _toastTimer = null;
-function showToast(msg, ms = 3400) {
+function showToast(msg, ms = 5000) {
   const el = document.getElementById('toast');
   if (!el) return;
-  el.textContent = msg;
-  el.style.display = 'block';
+  el.innerHTML = `<span>${esc(msg)}</span><button type="button" class="toast-x" onclick="hideToast()" aria-label="关闭">✕</button>`;
+  el.style.display = 'flex';
   void el.offsetWidth;  // reflow so the transition runs
   el.classList.add('show');
   if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => {
-    el.classList.remove('show');
-    setTimeout(() => { el.style.display = 'none'; }, 280);
-  }, ms);
+  _toastTimer = setTimeout(hideToast, ms);
+}
+function hideToast() {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.classList.remove('show');
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  setTimeout(() => { el.style.display = 'none'; }, 280);
 }
 
 // Seconds -> "M:SS" (used for writing-time badges in history).
@@ -1253,11 +1332,15 @@ function fmtDur(sec) {
 // -------- Draft auto-save (survives refresh / accidental navigation) --------
 function draftKey(ctx) { return ctx === 'essay' ? 'jwc_draft_essay' : 'jwc_draft_email'; }
 
-function saveDraft(ctx, val) {
-  try { localStorage.setItem(draftKey(ctx), val || ''); } catch (_) { /* storage full/blocked */ }
-  // Once the learner starts editing, the "restored" banner is no longer needed.
-  const hint = document.getElementById(`${ctx}-restored`);
-  if (hint && hint.style.display !== 'none') hint.style.display = 'none';
+function saveDraft(ctx, text) {
+  try {
+    localStorage.setItem(draftKey(ctx), JSON.stringify({
+      text: text || '',
+      elapsed: currentElapsedSeconds() || 0,   // carry the time already spent
+      mode: timer.mode || null,
+      savedAt: Date.now(),
+    }));
+  } catch (_) { /* storage full/blocked */ }
 }
 
 function clearDraft(ctx) {
@@ -1269,13 +1352,33 @@ function clearDraft(ctx) {
 function maybeRestoreDraft(ctx) {
   const ta = document.getElementById(ctx === 'essay' ? 'draft-input' : 'email-draft-input');
   if (!ta || ta.value.trim()) return;  // never clobber existing text
-  let saved = '';
-  try { saved = localStorage.getItem(draftKey(ctx)) || ''; } catch (_) {}
-  if (!saved.trim()) return;
-  ta.value = saved;
-  if (ctx === 'essay') updateCharCount(); else updateEmailCounter(ta);
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(draftKey(ctx)) || 'null'); } catch (_) {}
+  if (!saved || !saved.text || !saved.text.trim()) return;
+  // Ask first — do NOT auto-fill the editor.
   const hint = document.getElementById(`${ctx}-restored`);
-  if (hint) hint.style.display = '';  // show last (updateCharCount may have hidden it)
+  if (!hint) return;
+  const used = saved.elapsed ? `，已用 ${fmtClock(saved.elapsed)}` : '';
+  hint.innerHTML = `<span class="ic ic-leaf"></span>发现未提交的草稿（${saved.text.length} 字${used}）`
+    + `<button type="button" class="dr-btn dr-restore" onclick="restoreDraft('${ctx}')">恢复</button>`
+    + `<button type="button" class="dr-btn dr-discard" onclick="discardDraft('${ctx}')">放弃</button>`;
+  hint.style.display = '';
+}
+
+// User chose to resume: fill text and continue from the time already spent.
+function restoreDraft(ctx) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(draftKey(ctx)) || 'null'); } catch (_) {}
+  if (!saved) return;
+  const ta = document.getElementById(ctx === 'essay' ? 'draft-input' : 'email-draft-input');
+  if (ta) ta.value = saved.text || '';
+  if (timer.ctx === ctx && timer.total) {        // continue remaining time (timer still armed)
+    timer.remaining = Math.max(0, timer.total - (saved.elapsed || 0));
+    renderTimer();
+  }
+  if (ctx === 'essay') updateCharCount(); else if (ta) updateEmailCounter(ta);
+  const hint = document.getElementById(`${ctx}-restored`);
+  if (hint) hint.style.display = 'none';
 }
 
 // Discard a restored draft and start clean (from the "清空重写" link).
@@ -1295,6 +1398,7 @@ const EMAIL_SCENES = [
   {
     id: 'prof_kekka',
     title: '请假申请',
+    jp: '欠席のご連絡',
     icon: '🏥',
     difficulty: '初级',
     description: '因病或因事无法出席课程/研讨会，向教授发送请假邮件',
@@ -1315,6 +1419,7 @@ const EMAIL_SCENES = [
   {
     id: 'prof_shitsumon',
     title: '课程提问',
+    jp: 'ご質問',
     icon: '❓',
     difficulty: '初级',
     description: '对课程内容、作业要求或论文方向有疑问，通过邮件向教授请教',
@@ -1334,6 +1439,7 @@ const EMAIL_SCENES = [
   {
     id: 'prof_mendan',
     title: '约见面谈',
+    jp: '面談のお願い',
     icon: '📅',
     difficulty: '中级',
     description: '希望预约教授的office hour，讨论论文选题、研究进度等',
@@ -1353,6 +1459,7 @@ const EMAIL_SCENES = [
   {
     id: 'prof_suisen',
     title: '求推荐信',
+    jp: '推薦状のお願い',
     icon: '📝',
     difficulty: '高级',
     description: '申请留学、交换项目或就职时，请求导师/教授撰写推荐信',
@@ -1375,7 +1482,8 @@ const EMAIL_SCENES = [
   {
     id: 'job_entry',
     category: 'jobhunt',
-    title: '应募/エントリー',
+    title: '求职应聘',
+    jp: '応募・エントリー',
     icon: '📨',
     difficulty: '中级',
     description: '向企业发送求职申请/咨询邮件，表达应募意向（常附简历）',
@@ -1396,7 +1504,8 @@ const EMAIL_SCENES = [
   {
     id: 'job_obog',
     category: 'jobhunt',
-    title: 'OB·OG訪問依頼',
+    title: '校友访谈请求',
+    jp: 'OB・OG訪問依頼',
     icon: '🤝',
     difficulty: '高级',
     description: '请求向已入职的学长/学姐（OB·OG）请教，约访问·咨询',
@@ -1417,6 +1526,7 @@ const EMAIL_SCENES = [
     id: 'job_schedule',
     category: 'jobhunt',
     title: '面试日程调整',
+    jp: '面接日程の調整',
     icon: '🗓️',
     difficulty: '中级',
     description: '回复企业的面试邀约，确认或协调面试时间',
@@ -1437,6 +1547,7 @@ const EMAIL_SCENES = [
     id: 'job_thanks',
     category: 'jobhunt',
     title: '面试后致谢',
+    jp: '面接のお礼',
     icon: '🙏',
     difficulty: '中级',
     description: '面试结束当天，向面试官/人事发送感谢邮件',
@@ -1456,7 +1567,8 @@ const EMAIL_SCENES = [
   {
     id: 'job_naitei',
     category: 'jobhunt',
-    title: '内定承诺/辞退',
+    title: '接受 / 婉拒录用',
+    jp: '内定承諾・辞退',
     icon: '✅',
     difficulty: '高级',
     description: '接受或婉拒企业的录用（内定），措辞需格外得体',
@@ -1478,7 +1590,8 @@ const EMAIL_SCENES = [
   {
     id: 'biz_irai',
     category: 'business',
-    title: '业务请求/依頼',
+    title: '业务请求',
+    jp: '依頼',
     icon: '🙇',
     difficulty: '中级',
     description: '请同事或合作方协助处理事务、提供资料（依頼メール）',
@@ -1499,7 +1612,8 @@ const EMAIL_SCENES = [
   {
     id: 'biz_apo',
     category: 'business',
-    title: '约定会议/拜访',
+    title: '约定会议 / 拜访',
+    jp: 'アポイント',
     icon: '🗓️',
     difficulty: '中级',
     description: '与公司内外的工作对象约定打ち合わせ或拜访时间（アポ取り）',
@@ -1520,7 +1634,8 @@ const EMAIL_SCENES = [
   {
     id: 'biz_soufu',
     category: 'business',
-    title: '资料送付/报告',
+    title: '资料发送 / 汇报',
+    jp: '送付・報告',
     icon: '📎',
     difficulty: '初级',
     description: '向对方发送资料、附件，或汇报工作进展（送付・報告メール）',
@@ -1540,7 +1655,8 @@ const EMAIL_SCENES = [
   {
     id: 'biz_owabi',
     category: 'business',
-    title: '道歉/お詫び',
+    title: '致歉邮件',
+    jp: 'お詫び',
     icon: '🙏',
     difficulty: '高级',
     description: '因延误、失误等向对方致歉并提出补救措施（お詫びメール）',
@@ -1613,16 +1729,16 @@ function exitEmailMode() {
 }
 
 const EMAIL_CATEGORIES = [
-  { id: 'academic', label: '给教授 / 导师', icon: '🎓' },
-  { id: 'jobhunt',  label: '求职 / 就活',   icon: '💼' },
-  { id: 'business', label: '商务基础 / ビジネス', icon: '🏢' },
+  { id: 'academic', label: '学术邮件 · 给教授', icon: '🎓' },
+  { id: 'jobhunt',  label: '求职邮件 · 就活',   icon: '💼' },
+  { id: 'business', label: '商务邮件',          icon: '🏢' },
 ];
 
 function renderEmailSceneGrid() {
   const grid = document.getElementById('email-scene-grid');
   const card = s => `
     <div class="email-scene-card" id="esc-${s.id}" onclick="selectEmailScene('${s.id}', this)">
-      <div class="esc-title">${esc(s.title)}</div>
+      <div class="esc-title">${esc(s.title)}${s.jp ? `<span class="esc-jp jp-text" lang="ja">${esc(s.jp)}</span>` : ''}</div>
       <div class="esc-difficulty">${esc(s.difficulty)}</div>
       <div class="esc-desc">${esc(s.description)}</div>
     </div>`;
@@ -1641,7 +1757,7 @@ function selectEmailScene(sceneId, el) {
   document.getElementById('btn-email-start').disabled = false;
   const desc = document.getElementById('email-scene-desc');
   desc.style.display = '';
-  desc.innerHTML = `<span class="ic ic-idea"></span> 常用クッション言葉：<strong>${esc(emailState.scene.cushion)}</strong>`;
+  desc.innerHTML = `<span class="ic ic-idea"></span> 常用缓冲表达（クッション言葉）：<strong class="jp-text" lang="ja">${esc(emailState.scene.cushion)}</strong>`;
 }
 
 function startEmailWrite() {
@@ -1708,10 +1824,12 @@ const EMAIL_FORMAT_TEMPLATES = {
   ],
 };
 
+// 邮件格式结构项：中文标签（日语原词在示例值中体现）
+const FORMAT_TAG_CN = { '宛名':'收件人', '名乗り':'自我介绍', '挨拶':'问候', '用件':'写信目的', '本文':'正文', '結び':'结尾语', '署名':'署名' };
 function renderEmailFormatPanel() {
   const tmpl = EMAIL_FORMAT_TEMPLATES[emailState.scene.category] || EMAIL_FORMAT_TEMPLATES.academic;
   document.getElementById('email-format-box').innerHTML = tmpl
-    .map(([tag, val]) => `<div class="email-format-line"><span class="email-format-tag">${esc(tag)}</span>${esc(val)}</div>`)
+    .map(([tag, val]) => `<div class="email-format-line"><span class="email-format-tag">${esc(FORMAT_TAG_CN[tag] || tag)}</span><span class="jp-text" lang="ja">${esc(val)}</span></div>`)
     .join('');
 }
 
@@ -1783,14 +1901,14 @@ async function submitEmailCorrect() {
 }
 
 const SCORE_DIM_LABELS = {
-  keigo:       { label: '敬語正確性', desc: '尊敬語/謙譲語正确使用' },
-  politeness:  { label: '礼貌度',     desc: 'クッション言葉·语气' },
-  format:      { label: '格式完整性', desc: '宛名·結び·署名等' },
+  keigo:       { label: '敬语准确性', desc: '尊敬语与谦让语使用' },
+  politeness:  { label: '礼貌度',     desc: '缓冲表达与语气' },
+  format:      { label: '格式完整性', desc: '收件人称谓、结尾语、署名等' },
   naturalness: { label: '语言自然度', desc: '地道流畅，无中文腔' },
 };
 
 const EMAIL_ERROR_LABELS = {
-  keigo:       { label: '敬語', cls: 'badge-grammar' },
+  keigo:       { label: '敬语', cls: 'badge-grammar' },
   politeness:  { label: '礼貌度', cls: 'badge-naturalness' },
   format:      { label: '格式', cls: 'badge-connector' },
   naturalness: { label: '自然度', cls: 'badge-particle' },
@@ -1831,7 +1949,7 @@ function renderEmailCorrection(result) {
   const mistakes = result.keigo_mistakes || [];
   document.getElementById('email-keigo-mistakes-section').innerHTML = mistakes.length ? `
     <div class="card card-keigo-alert">
-      <div class="card-title"><span class="ic ic-alert"></span>敬語错误详解（${mistakes.length}处，重点记忆）</div>
+      <div class="card-title"><span class="ic ic-alert"></span>敬语错误详解（${mistakes.length}处，重点记忆）</div>
       ${mistakes.map(m => `
         <div class="keigo-mistake-item">
           <span class="keigo-mistake-type">${esc(m.type)}</span>

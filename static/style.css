@@ -56,7 +56,8 @@
 }
 
 body {
-  font-family: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans SC', system-ui, sans-serif;
+  /* 操作界面为简体中文 → 中文字体优先，避免中文被日文字形渲染（也消除假粗体） */
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   background: var(--paper);
   color: var(--gray-800);
   min-height: 100vh;
@@ -68,6 +69,9 @@ body {
 
 /* 明朝 serif for Japanese display moments (examples, corrected text, marks) */
 :root { --serif: 'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', 'Songti SC', serif; }
+
+/* 日语（黑体）内容：题目、苏格拉底提问、邮件场景日语术语等，用日文字体显示日文字形 */
+.jp-text { font-family: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', sans-serif; }
 
 /* ========== Line icons (1.5px, currentColor via CSS mask) ========== */
 .ic {
@@ -191,10 +195,13 @@ body {
 }
 /* ===== Staged workbench: main task + optional side panel ===== */
 .stage { display: grid; gap: 24px; align-items: start; }
-.stage--left  { grid-template-columns: 264px minmax(0, 1fr); }
+.stage--left  { grid-template-columns: 300px minmax(0, 1fr); }
 .stage--right { grid-template-columns: minmax(0, 1fr) 320px; }
 .stage-aside { position: sticky; top: 82px; }
 .stage-aside .card { margin-bottom: 16px; }
+/* 专注模式：收起左侧题目/提纲栏，编辑器占满整宽 */
+.stage--left.is-collapsed { grid-template-columns: 1fr; }
+.stage--left.is-collapsed .stage-aside { display: none; }
 @media (max-width: 860px) {
   /* minmax(0,1fr) — not 1fr — so the column can shrink below child min-content
      instead of forcing horizontal overflow (the CSS-grid min-content trap) */
@@ -456,7 +463,7 @@ body {
 }
 
 .topic-box::after {
-  content: '問';
+  content: '';
   position: absolute;
   right: 18px;
   top: 50%;
@@ -780,6 +787,11 @@ body {
 .diag-chip.is-active { box-shadow: 0 0 0 1.5px var(--ink-soft); }
 .diag-empty { font-size: 13px; color: var(--gray-500); padding: 8px 0; }
 
+/* correction consistency indicator (marks / suggestions / categories one source) */
+.corr-consistency { font-size: 11px; color: var(--gray-500); margin: -6px 0 14px; }
+.corr-ok   { color: var(--matcha); font-weight: 600; }
+.corr-warn { color: var(--gold); font-weight: 600; }
+
 /* suggestion list */
 .sug { border: 1px solid var(--gray-200); border-radius: 10px; margin-bottom: 8px; background: var(--paper-2); transition: border-color .15s, box-shadow .15s; }
 .sug.is-hot { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-lt); }
@@ -788,7 +800,7 @@ body {
 .sug-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; }
 .sug-no { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--gray-100); color: var(--gray-600); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .sug-tag { flex-shrink: 0; }
-.sug-preview { flex: 1; min-width: 0; font-size: 12px; color: var(--gray-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sug-preview { flex: 1; min-width: 0; font-size: 12px; color: var(--gray-600); line-height: 1.55; word-break: break-word; }
 .sug-orig { color: var(--red); text-decoration: line-through; text-decoration-color: rgba(189,74,56,.5); font-family: var(--serif); }
 .sug-fixed { color: var(--green); font-weight: 700; font-family: var(--serif); }
 .sug-caret { flex-shrink: 0; width: 7px; height: 7px; border-right: 1.5px solid var(--gray-400); border-bottom: 1.5px solid var(--gray-400); transform: rotate(45deg); transition: transform .18s; margin-left: 2px; }
@@ -1297,6 +1309,7 @@ body {
 }
 .esc-icon       { font-size: 26px; margin-bottom: 8px; }
 .esc-title      { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 3px; letter-spacing: -0.2px; }
+.esc-jp         { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--indigo); background: var(--indigo-lt); padding: 1px 7px; border-radius: 6px; vertical-align: middle; letter-spacing: 0; }
 .esc-difficulty { display: inline-block; font-size: 11px; font-weight: 600; background: var(--indigo-lt); color: var(--indigo); padding: 2px 8px; border-radius: 6px; margin-bottom: 6px; }
 .esc-desc       { font-size: 12px; color: var(--gray-600); line-height: 1.6; }
 
@@ -1323,7 +1336,7 @@ body {
 .email-format-line:last-child { border-bottom: none; }
 .email-format-tag {
   flex-shrink: 0;
-  width: 52px;
+  width: 64px;
   font-size: 11px;
   font-weight: 700;
   color: var(--indigo);
@@ -1456,66 +1469,58 @@ body {
 /* ============================================================
    Writing timer bar (essay step 2 + email step 1)
    ============================================================ */
+/* lightweight assistive toolbar — not a banner; sits under the editor title */
 .writing-timer {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-wrap: wrap;
-  background: var(--indigo-lt);
-  border: 1px solid var(--indigo-bd);
-  border-radius: 10px;
-  padding: 9px 14px;
-  margin-bottom: 14px;
-  transition: background .3s, border-color .3s;
+  padding: 5px 2px 9px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--gray-200);
 }
-.writing-timer .ic-clock { width: 17px; height: 17px; color: var(--indigo); }
+.writing-timer .ic-clock { width: 15px; height: 15px; color: var(--gray-400); }
 .wt-time {
   font-variant-numeric: tabular-nums;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--indigo-dk);
-  letter-spacing: .5px;
-  min-width: 52px;
+  color: var(--gray-700);
+  letter-spacing: .3px;
 }
 .wt-bar {
-  flex: 1 1 90px;
-  min-width: 70px;
-  height: 6px;
+  flex: 1 1 80px;
+  min-width: 60px;
+  height: 4px;
   background: var(--gray-200);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
 }
 .wt-bar-fill {
   height: 100%;
   width: 0;
   background: var(--indigo);
-  border-radius: 3px;
+  border-radius: 2px;
   transition: width .35s linear, background .3s;
 }
-.wt-note { font-size: 12px; color: var(--gray-500); }
+.wt-note { font-size: 11px; color: var(--gray-400); }
 .wt-btn {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   font-family: inherit;
-  color: var(--gray-600);
-  background: var(--paper-2);
-  border: 1px solid var(--gray-300);
-  border-radius: 6px;
-  padding: 4px 12px;
+  color: var(--gray-500);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 2px 7px;
   cursor: pointer;
-  transition: border-color .15s, color .15s;
+  transition: color .15s, background .15s;
 }
-.wt-btn:hover { border-color: var(--indigo); color: var(--indigo); }
+.wt-btn:hover { color: var(--indigo); background: var(--gray-100); }
 
-/* last minute: amber warning */
-.writing-timer.is-warn { background: #F6EEDC; border-color: #E6D6A8; }
-.writing-timer.is-warn .ic-clock { color: var(--gold); }
+/* state changes touch only the time text + thin bar, never the whole row */
 .writing-timer.is-warn .wt-time { color: var(--gold); }
 .writing-timer.is-warn .wt-bar-fill { background: var(--gold); }
-
-/* over recommended time: red (practice never hard-stops) */
-.writing-timer.is-over { background: var(--primary-lt); border-color: var(--primary-bd); }
-.writing-timer.is-over .ic-clock { color: var(--primary-dk); }
+.writing-timer.is-over .ic-clock { color: var(--primary); }
 .writing-timer.is-over .wt-time { color: var(--primary-dk); }
 .writing-timer.is-over .wt-bar-fill { background: var(--primary); }
 
@@ -1534,6 +1539,14 @@ body {
 }
 .draft-restored .ic-leaf { width: 14px; height: 14px; color: var(--matcha); }
 .draft-restored a { color: var(--indigo); cursor: pointer; text-decoration: underline; }
+.dr-btn {
+  font-size: 11px; font-weight: 600; font-family: inherit;
+  border-radius: 6px; padding: 2px 11px; cursor: pointer;
+  border: 1px solid var(--gray-300); background: var(--paper-2); color: var(--gray-600);
+}
+.dr-restore { border-color: var(--indigo); color: var(--indigo); }
+.dr-restore:hover { background: var(--indigo-lt); }
+.dr-discard:hover { background: var(--gray-100); }
 
 /* writing-time badge in history rows */
 .hist-time {
@@ -1551,20 +1564,31 @@ body {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 32px;
+  bottom: 80px;
   transform: translateX(-50%) translateY(10px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
   background: var(--ink);
   color: #fff;
   font-size: 13px;
   line-height: 1.6;
-  padding: 11px 20px;
+  padding: 11px 14px 11px 18px;
   border-radius: 10px;
   box-shadow: var(--shadow-hover);
   z-index: 300;
   max-width: 90vw;
-  text-align: center;
   opacity: 0;
   transition: opacity .25s, transform .25s;
   pointer-events: none;
 }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.toast-x {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  border: none; border-radius: 50%;
+  background: rgba(255,255,255,.16);
+  color: #fff; font-size: 11px; line-height: 1;
+  cursor: pointer; transition: background .15s;
+}
+.toast-x:hover { background: rgba(255,255,255,.32); }

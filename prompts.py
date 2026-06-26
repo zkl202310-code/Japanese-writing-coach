@@ -4,6 +4,11 @@
 # are Chinese learners of Japanese).
 # ============================================================
 
+# Canonical annotation error types — must stay in sync with CORRECTION_SYSTEM's
+# error_type enum and the frontend ERROR_LABELS keys. Used server-side to
+# recompute error_summary from annotations (single source of truth).
+ERROR_TYPES = ("particle", "register", "conjugation", "connector", "naturalness", "grammar")
+
 EXAM_LABELS = {
     "jlpt_n2":   "N2 水平 意見文（です・ます体、300〜400字）",
     "jlpt_n1":   "N1 水平 意見文（です・ます体 または だ体、400〜600字）",

@@ -413,7 +413,9 @@ async function loadTopic() {
     document.getElementById('topic-hint').textContent = data.hint ? `参考方向：${data.hint}` : '';
     renderPositionUI(data.text);
   } catch (e) {
-    document.getElementById('topic-display').textContent = '题目加载失败，请刷新重试。';
+    document.getElementById('topic-display').textContent = '题目加载失败';
+    document.getElementById('topic-hint').innerHTML =
+      `<button type="button" class="btn-retry" onclick="loadTopic()">重试</button>`;
   }
 }
 
@@ -434,31 +436,38 @@ async function submitPlan() {
   hide('plan-feedback-box');
   document.getElementById('btn-to-write').style.display = 'none';
 
+  const textEl = document.getElementById('plan-feedback-text');
+  textEl.textContent = '';
+  let acc = '';
+  let revealed = false;
+  const reveal = () => { if (!revealed) { hide('plan-loading'); show('plan-feedback-box'); revealed = true; } };
+
   try {
-    const data = await api('/api/plan/review', {
+    await apiStream('/api/plan/review', {
       exam_type: state.examType,
       topic_text: state.topic.text,
       position,
       reasons,
       structure,
       user_id: USER_ID,
+    }, {
+      onMeta: (m) => { state.sessionId = m.session_id; },
+      onDelta: (t) => { reveal(); acc += t; textEl.textContent = acc; },
+      onDone: (d) => {
+        reveal();
+        state.planFeedback = acc;
+        state.canProceed = !!d.can_proceed;
+        const badge = document.getElementById('plan-status-badge');
+        const btn = document.getElementById('btn-to-write');
+        if (d.can_proceed) {
+          badge.innerHTML = '<span class="feedback-status status-ok">可以开始写作</span>';
+        } else {
+          badge.innerHTML = '<span class="feedback-status status-warn">建议调整后再开始</span>';
+          btn.textContent = '仍然开始写作 →';
+        }
+        btn.style.display = 'inline-flex';
+      },
     });
-
-    state.sessionId = data.session_id;
-    state.planFeedback = data.feedback;
-    state.canProceed = data.can_proceed;
-
-    document.getElementById('plan-feedback-text').textContent = data.feedback;
-    const badge = document.getElementById('plan-status-badge');
-    if (data.can_proceed) {
-      badge.innerHTML = '<span class="feedback-status status-ok">可以开始写作</span>';
-      document.getElementById('btn-to-write').style.display = 'inline-flex';
-    } else {
-      badge.innerHTML = '<span class="feedback-status status-warn">建议调整后再开始</span>';
-      document.getElementById('btn-to-write').style.display = 'inline-flex';
-      document.getElementById('btn-to-write').textContent = '仍然开始写作 →';
-    }
-    show('plan-feedback-box');
   } catch (e) {
     alert('请求失败：' + e.message);
   } finally {
@@ -478,9 +487,9 @@ function goToStep2() {
   document.getElementById('topic-display-2').textContent = state.topic.text;
   document.getElementById('topic-meta-2').innerHTML = topicReqHTML(state.examType);
   document.getElementById('plan-summary-display').innerHTML =
-    `<span>立场：<strong>${position}</strong></span>` +
-    `<span>理由：<strong>${reasons.join(' / ')}</strong></span>` +
-    `<span>构成：<strong>${structure}</strong></span>`;
+    `<span>立场：<strong>${esc(position)}</strong></span>` +
+    `<span>理由：<strong>${esc(reasons.join(' / '))}</strong></span>` +
+    `<span>构成：<strong>${esc(structure)}</strong></span>`;
 
   stopWritingTimer();  // new attempt → fresh clock
   goToStep(2);
@@ -514,34 +523,44 @@ async function submitDraft() {
   show('socratic-loading');
   hide('socratic-box');
 
+  const qEl = document.getElementById('socratic-questions');
+  qEl.textContent = '';
+  let acc = '';
+  let revealed = false;
+  const reveal = () => { if (!revealed) { hide('socratic-loading'); show('socratic-box'); revealed = true; } };
+
   try {
-    const data = await api('/api/draft/socratic', {
+    await apiStream('/api/draft/socratic', {
       session_id: state.sessionId,
       draft,
+    }, {
+      // Stream raw text live (textContent is XSS-safe), then snap to formatted
+      // question blocks once the full set has arrived.
+      onDelta: (t) => { reveal(); acc += t; qEl.textContent = acc; },
+      onDone: () => { reveal(); renderSocraticBlocks(qEl, acc); },
     });
-
-    // Parse and display questions
-    const qEl = document.getElementById('socratic-questions');
-    qEl.innerHTML = '';
-    const lines = data.questions.split('\n').filter(l => l.trim());
-    let block = '';
-    lines.forEach(line => {
-      if (/^[QＱ１２３1-9]/.test(line) && block) {
-        qEl.innerHTML += `<div class="question-item">${block.trim()}</div>`;
-        block = '';
-      }
-      block += line + '\n';
-    });
-    if (block.trim()) {
-      qEl.innerHTML += `<div class="question-item">${block.trim()}</div>`;
-    }
-
-    show('socratic-box');
   } catch (e) {
     alert('获取问题失败：' + e.message);
     show('draft-btn-row');
   } finally {
     hide('socratic-loading');
+  }
+}
+
+// Split the Socratic text into one card per question (日语 + 中文 grouped).
+function renderSocraticBlocks(qEl, text) {
+  qEl.innerHTML = '';
+  const lines = text.split('\n').filter(l => l.trim());
+  let block = '';
+  lines.forEach(line => {
+    if (/^[QＱ１２３1-9]/.test(line) && block) {
+      qEl.innerHTML += `<div class="question-item">${esc(block.trim())}</div>`;
+      block = '';
+    }
+    block += line + '\n';
+  });
+  if (block.trim()) {
+    qEl.innerHTML += `<div class="question-item">${esc(block.trim())}</div>`;
   }
 }
 
@@ -551,10 +570,10 @@ function backToWrite() {
 }
 
 // -------- Handwriting OCR (writing stage) --------
-// The control is hidden until /api/health reports ocr_enabled (one env switch).
+// Hidden until /api/config reports ocr_enabled (cheap flag endpoint, no LLM ping).
 async function initOcrAvailability() {
   try {
-    const h = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
+    const h = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
     if (h && h.ocr_enabled) show('ocr-row');
   } catch (_) { /* leave hidden */ }
 }
@@ -868,6 +887,7 @@ function renderReflection(data) {
 async function loadModelEssay() {
   show('model-loading');
   hide('model-essay-content');
+  const loadingEl = document.getElementById('model-loading');
   try {
     // Reuse the background prefetch started right after correction, if present.
     const data = await (state.modelEssayPromise || api('/api/model-essay', { session_id: state.sessionId }));
@@ -887,10 +907,14 @@ async function loadModelEssay() {
       exprSection.style.display = 'block';
     }
     show('model-essay-content');
+    hide('model-loading');  // hide only on success — keep the error visible otherwise
   } catch (e) {
-    document.getElementById('model-loading').innerHTML = '<span style="color:#DC2626">范文生成失败，可刷新重试</span>';
-  } finally {
-    hide('model-loading');
+    // A rejected prefetch promise stays cached; drop it so 重试 actually re-fetches.
+    state.modelEssayPromise = null;
+    loadingEl.innerHTML =
+      `<div class="load-error">范文生成失败：${esc(e.message || '请稍后重试')}` +
+      `<button type="button" class="btn-retry" onclick="loadModelEssay()">重试</button></div>`;
+    show('model-loading');
   }
 }
 
@@ -1211,8 +1235,8 @@ function renderHistory(data) {
     listEl.innerHTML += `
       <div class="hist-item hist-item-click" onclick="openEssayDetail('${s.session_id}')">
         <div class="hist-item-head">
-          <span class="hist-exam">${examName}</span>
-          <span class="hist-level">${s.score_level || '—'}</span>
+          <span class="hist-exam">${esc(examName)}</span>
+          <span class="hist-level">${esc(s.score_level || '—')}</span>
           ${s.duration_sec ? `<span class="hist-time"><span class="ic ic-clock"></span>${fmtDur(s.duration_sec)}</span>` : ''}
           <span class="hist-date">${date}</span>
         </div>
@@ -1307,16 +1331,90 @@ function renderEmailHistory(data) {
 
 // -------- Utilities --------
 
+// Bound a hung request (Render cold start + slow LLM) instead of spinning the
+// spinner forever; the SDK/server fail faster, this is the client-side backstop.
+const API_TIMEOUT_MS = 120000;
+
 async function api(path, body) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
   const opts = body
-    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    : { method: 'GET' };
-  const res = await fetch(path, opts);
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal }
+    : { method: 'GET', signal: ctrl.signal };
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      throw new Error('服务响应较慢（可能正在唤醒），请稍后重试。');
+    }
+    throw new Error('网络连接失败，请检查网络后重试。');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+// Consume a Server-Sent Events stream. handlers = {onMeta, onDelta, onDone}.
+// Throws on network/abort/HTTP error or a server-sent `error` event, so callers
+// keep their existing try/catch UX.
+async function apiStream(path, body, handlers = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e && e.name === 'AbortError') throw new Error('服务响应较慢（可能正在唤醒），请稍后重试。');
+    throw new Error('网络连接失败，请检查网络后重试。');
+  }
+  if (!res.ok) {
+    clearTimeout(timer);
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        let event = 'message', data = '';
+        frame.split('\n').forEach(line => {
+          if (line.startsWith('event:')) event = line.slice(6).trim();
+          else if (line.startsWith('data:')) data += line.slice(5).trim();
+        });
+        if (!data) continue;
+        let parsed;
+        try { parsed = JSON.parse(data); } catch (_) { continue; }
+        if (event === 'error') throw new Error(parsed.detail || 'AI 服务错误，请重试。');
+        else if (event === 'meta') handlers.onMeta && handlers.onMeta(parsed);
+        else if (event === 'delta') handlers.onDelta && handlers.onDelta(parsed.text || '');
+        else if (event === 'done') handlers.onDone && handlers.onDone(parsed);
+      }
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error('服务响应较慢（可能正在唤醒），请稍后重试。');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function show(id) {
@@ -2036,9 +2134,11 @@ function renderEmailCorrection(result) {
 }
 
 async function loadEmailModel() {
-  document.getElementById('btn-email-model').disabled = true;
+  const btn = document.getElementById('btn-email-model');
+  btn.disabled = true;
   show('email-model-loading');
   hide('email-model-content');
+  const loadingEl = document.getElementById('email-model-loading');
   try {
     const data = await (emailState.modelEmailPromise || api('/api/email/model', {
       scene_id:       emailState.scene.id,
@@ -2048,11 +2148,15 @@ async function loadEmailModel() {
     }));
     renderEmailModel(data);
     show('email-model-content');
+    hide('email-model-loading');  // hide only on success
   } catch (e) {
-    document.getElementById('email-model-loading').innerHTML =
-      `<span style="color:var(--red)">范文生成失败：${esc(e.message)}</span>`;
-  } finally {
-    hide('email-model-loading');
+    // Drop the cached (rejected) prefetch and re-enable the button so 重试 works.
+    emailState.modelEmailPromise = null;
+    btn.disabled = false;
+    loadingEl.innerHTML =
+      `<div class="load-error">范文生成失败：${esc(e.message || '请稍后重试')}` +
+      `<button type="button" class="btn-retry" onclick="loadEmailModel()">重试</button></div>`;
+    show('email-model-loading');
   }
 }
 

@@ -264,7 +264,7 @@ body {
 
 .step-label {
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--gray-500);
   white-space: nowrap;
   font-weight: 500;
 }
@@ -457,7 +457,7 @@ body {
 }
 
 .mode-card .mode-style { font-size: 12px; color: var(--gray-600); margin-bottom: 4px; }
-.mode-card .mode-chars { font-size: 12px; color: var(--gray-400); }
+.mode-card .mode-chars { font-size: 12px; color: var(--gray-500); }
 .mode-card .mode-tag {
   display: inline-block;
   margin-top: 14px;
@@ -498,7 +498,7 @@ body {
 
 .topic-hint {
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--gray-500);
   margin-top: 6px;
 }
 
@@ -675,7 +675,7 @@ body {
 .char-counter {
   text-align: right;
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--gray-500);
   margin-top: 6px;
 }
 
@@ -1017,7 +1017,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--gray-400);
+  color: var(--gray-500);
   font-size: 14px;
   padding: 20px 0;
 }
@@ -1033,6 +1033,28 @@ body {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Inline failure + retry (model essay / email model load errors stay visible) */
+.load-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--red);
+  font-size: 14px;
+  padding: 16px 0;
+}
+.btn-retry {
+  border: 1.5px solid var(--indigo);
+  background: #fff;
+  color: var(--indigo);
+  font-size: 13px;
+  padding: 5px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.btn-retry:hover { background: var(--indigo); color: #fff; }
 
 /* ========== Section visibility ========== */
 .section { display: none; }
@@ -1083,7 +1105,7 @@ body {
   gap: 6px;
   background: none;
   border: none;
-  color: var(--gray-400);
+  color: var(--gray-500);
   font-size: 13px;
   cursor: pointer;
   padding: 4px 0;
@@ -1244,7 +1266,7 @@ body {
   border-radius: 4px 4px 0 0;
   transition: height .5s ease;
 }
-.trend-idx { font-size: 10px; color: var(--gray-400); }
+.trend-idx { font-size: 10px; color: var(--gray-500); }
 .trend-caption { font-size: 12px; color: var(--matcha); margin-top: 8px; }
 
 /* History list */
@@ -1258,14 +1280,14 @@ body {
 .hist-item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .hist-exam { font-size: 13px; font-weight: 700; color: var(--navy); }
 .hist-level { font-size: 11px; font-weight: 700; color: #44543B; background: #EAEEE4; padding: 2px 8px; border-radius: 6px; }
-.hist-date { font-size: 11px; color: var(--gray-400); margin-left: auto; }
+.hist-date { font-size: 11px; color: var(--gray-500); margin-left: auto; }
 .hist-topic { font-size: 13px; color: var(--gray-800); margin-bottom: 8px; line-height: 1.6; }
 .hist-badges { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Clickable history cards -> detail re-view */
 .hist-item-click { cursor: pointer; transition: border-color .16s, box-shadow .16s, transform .16s; }
 .hist-item-click:hover { border-color: var(--indigo); box-shadow: var(--shadow); transform: translateY(-1px); }
-.hist-open-hint { font-size: 11px; color: var(--gray-400); margin-top: 8px; opacity: 0; transition: opacity .16s; }
+.hist-open-hint { font-size: 11px; color: var(--gray-500); margin-top: 8px; opacity: 0; transition: opacity .16s; }
 .hist-item-click:hover .hist-open-hint { opacity: 1; color: var(--indigo); font-weight: 600; }
 @media (hover: none) { .hist-open-hint { opacity: 1; } }
 
@@ -1284,7 +1306,7 @@ body {
 .detail-back:hover { background: var(--gray-200); }
 .detail-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .detail-title { font-size: 16px; font-weight: 700; color: var(--navy); }
-.detail-date { font-size: 12px; color: var(--gray-400); }
+.detail-date { font-size: 12px; color: var(--gray-500); }
 .detail-topic { font-size: 14px; color: var(--gray-800); line-height: 1.7; margin-bottom: 4px; }
 .detail-topic strong { color: var(--navy); }
 .detail-stat-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -1477,7 +1499,7 @@ body {
 .email-score-total .email-score-desc { color: rgba(255,255,255,.75); }
 .email-score-val  { font-size: 24px; font-weight: 700; line-height: 1.2; }
 .email-score-dim  { font-size: 12px; font-weight: 700; color: var(--gray-700); margin-top: 4px; }
-.email-score-desc { font-size: 10px; color: var(--gray-400); margin-top: 2px; line-height: 1.4; }
+.email-score-desc { font-size: 10px; color: var(--gray-500); margin-top: 2px; line-height: 1.4; }
 
 /* --- Keigo mistakes alert card --- */
 .card-keigo-alert {
@@ -1582,7 +1604,7 @@ body {
   border-radius: 2px;
   transition: width .35s linear, background .3s;
 }
-.wt-note { font-size: 11px; color: var(--gray-400); }
+.wt-note { font-size: 11px; color: var(--gray-500); }
 .wt-btn {
   font-size: 11px;
   font-weight: 600;

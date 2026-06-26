@@ -1,8 +1,19 @@
+import logging
 import os
+import time
+
+import httpx
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("jwritecoach.llm")
+
+# Bound a hung DeepSeek call instead of the SDK's 600s default; one retry rides
+# out a transient 5xx/connection blip. Both tunable via env without a redeploy.
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "90"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))
 
 _client = None
 
@@ -13,12 +24,15 @@ def get_client() -> OpenAI:
         _client = OpenAI(
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url="https://api.deepseek.com",
+            timeout=httpx.Timeout(LLM_TIMEOUT, connect=10.0),
+            max_retries=LLM_MAX_RETRIES,
         )
     return _client
 
 
 def chat(system: str, user: str, temperature: float = 0.7) -> str:
     client = get_client()
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         model="deepseek-v4-pro",
         messages=[
@@ -27,11 +41,13 @@ def chat(system: str, user: str, temperature: float = 0.7) -> str:
         ],
         temperature=temperature,
     )
+    logger.info("chat() finished in %.1fs", time.perf_counter() - t0)
     return response.choices[0].message.content
 
 
 def chat_json(system: str, user: str) -> str:
     client = get_client()
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         model="deepseek-v4-pro",
         messages=[
@@ -41,13 +57,44 @@ def chat_json(system: str, user: str) -> str:
         temperature=0.3,
         response_format={"type": "json_object"},
     )
+    logger.info("chat_json() finished in %.1fs", time.perf_counter() - t0)
     return response.choices[0].message.content
 
 
-def ping() -> None:
-    """Minimal call to verify the API key + connectivity. Raises on failure."""
+def chat_stream(system: str, user: str, temperature: float = 0.7):
+    """Yield answer-text chunks as they arrive, for the plain-text endpoints.
+
+    Thinking mode is disabled so the answer streams from the first token —
+    otherwise deepseek-v4-pro emits its whole reasoning trace first, which would
+    block the first visible token and defeat streaming. With thinking off the
+    temperature actually takes effect too.
+    """
     client = get_client()
-    client.chat.completions.create(
+    t0 = time.perf_counter()
+    stream = client.chat.completions.create(
+        model="deepseek-v4-pro",
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=temperature,
+        stream=True,
+        extra_body={"thinking": {"type": "disabled"}},
+    )
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        piece = chunk.choices[0].delta.content
+        if piece:
+            yield piece
+    logger.info("chat_stream() finished in %.1fs", time.perf_counter() - t0)
+
+
+def ping() -> None:
+    """Minimal call to verify the API key + connectivity. Raises on failure.
+    Uses a short timeout so a slow API doesn't make /api/health hang."""
+    client = get_client()
+    client.with_options(timeout=15.0).chat.completions.create(
         model="deepseek-v4-pro",
         messages=[{"role": "user", "content": "ping"}],
         max_tokens=1,
